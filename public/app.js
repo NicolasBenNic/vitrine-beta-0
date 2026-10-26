@@ -1,8 +1,8 @@
 const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
-const inviteToken = new URLSearchParams(location.search).get('invite') || '';
+let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -128,12 +128,12 @@ function invitesPage() {
 function itemModal() {
   if (!state.modal) return '';
   const item=state.modal.id ? state.items.find(i=>i.id===state.modal.id) : null;
-  const data=item || {name:'',category:'Serviços',description:'',price_cents:0,image_url:''};
+  const data=state.editDraft || item || {name:'',category:'Serviços',description:'',price_cents:0,image_url:''};
   return '<div class="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="Editor de serviços">' +
     '<div class="modal-header"><div><p class="kicker">seu catálogo</p><h2>' + (item?'Editar serviço':'Novo serviço') + '</h2></div><button class="close" type="button" data-action="close-modal" aria-label="Fechar">×</button></div>' +
     '<form id="item-form"><div class="form-grid"><label class="field full">Nome do serviço<input required maxlength="120" name="name" value="' + esc(data.name) + '" placeholder="Ex.: Corte masculino"></label>' +
     '<label class="field">Categoria<input maxlength="80" name="category" required value="' + esc(data.category) + '"></label>' +
-    '<label class="field">Preço (R$)<input name="price" required inputmode="decimal" value="' + esc((data.price_cents / 100).toFixed(2).replace('.',',')) + '"></label>' +
+    '<label class="field">Preço (R$)<input name="price" required inputmode="decimal" value="' + esc(data.priceInput !== undefined ? data.priceInput : (data.price_cents / 100).toFixed(2).replace('.',',')) + '"></label>' +
     '<label class="field full">Descrição<textarea name="description" rows="3" maxlength="1500">' + esc(data.description) + '</textarea></label></div>' +
     '<div class="upload-row" style="margin-top:15px"><label>Imagem do serviço · JPG, PNG ou WebP, até 10 MB</label><input type="file" data-upload="item" accept="image/jpeg,image/png,image/webp">' +
     (state.editImagePath?'<p class="small">✓ Imagem selecionada</p>':'') +
@@ -219,7 +219,7 @@ async function onForm(event) {
       const action=inviteToken?'/api/auth/register':'/api/auth/login';
       if(inviteToken){payload.invite=inviteToken;payload.businessName=fd.get('businessName');}
       await request(action,{method:'POST',...jsonBody(payload)});
-      history.replaceState({},'', '/');
+      inviteToken=''; history.replaceState({},'', '/');
       await reload();toast('Bem-vindo à Vitrine.');
     } else if (form.id==='business-form') {
       await request('/api/business',{method:'PUT',...jsonBody({name:fd.get('name'),description:fd.get('description'),whatsapp:fd.get('whatsapp'),logo_path:state.business.logo_path})});
@@ -235,7 +235,7 @@ async function onForm(event) {
         }
       }
       await request('/api/items'+(editing?'/'+editing:''),{method:editing?'PATCH':'POST',...jsonBody(payload)});
-      state.modal=null;state.editImagePath='';state.editImageURL='';
+      state.modal=null;state.editDraft=null;state.editImagePath='';state.editImageURL='';
       await reload();toast('Serviço salvo.');
     } else if(form.id==='command-form') {
       await runCommand(String(fd.get('command')));
@@ -265,9 +265,9 @@ async function onClick(event) {
     }
     if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();renderApp();}
     else if(action==='logout'){await request('/api/auth/logout',{method:'POST'});state.user=null;state.business=null;renderAuth();}
-    else if(action==='add-item'||action==='quick-add'){state.modal={};state.editImagePath='';state.editImageURL='';renderApp();}
-    else if(action==='edit-item'){const item=state.items.find(i=>i.id===button.dataset.id);if(item){state.modal={id:item.id};state.editImagePath=item.image_path||'';state.editImageURL=item.image_url||'';renderApp();}}
-    else if(action==='close-modal'){state.modal=null;renderApp();}
+    else if(action==='add-item'||action==='quick-add'){state.modal={};state.editDraft=null;state.editImagePath='';state.editImageURL='';renderApp();}
+    else if(action==='edit-item'){const item=state.items.find(i=>i.id===button.dataset.id);if(item){state.modal={id:item.id};state.editDraft=null;state.editImagePath=item.image_path||'';state.editImageURL=item.image_url||'';renderApp();}}
+    else if(action==='close-modal'){state.modal=null;state.editDraft=null;renderApp();}
     else if(action==='preview-next'||action==='preview-prev'){state.previewIndex=(state.previewIndex+(action==='preview-next'?1:-1)+state.items.length)%Math.max(1,state.items.length);renderApp();}
     else if(action==='quick-publish'){await request('/api/publish',{method:'POST',...jsonBody({publish:true})});await reload();toast('Vitrine publicada.');}
     else if(action==='toggle-publish'){const published=!state.business.is_published;await request('/api/publish',{method:'POST',...jsonBody({publish:published})});await reload();toast(published?'Vitrine publicada.':'Vitrine retirada do ar.');}
@@ -282,13 +282,18 @@ async function onChange(event) {
   const file=target.files[0], purpose=target.dataset.upload;
   if(file.size>10*1024*1024)return toast('Imagem muito grande: máximo 10 MB.',true);
   if(!['image/jpeg','image/png','image/webp'].includes(file.type))return toast('Use JPG, PNG ou WebP.',true);
+  if(purpose==='item') {
+    const form=document.getElementById('item-form');
+    if(form){ const draft=new FormData(form);state.editDraft={name:String(draft.get('name')||''),category:String(draft.get('category')||'Serviços'),description:String(draft.get('description')||''),priceInput:String(draft.get('price')||'0,00'),price_cents:0};}
+  }
   state.busy=true;
   try {
     const data=await request('/api/upload',{method:'POST',headers:{'Content-Type':file.type},body:file});
     if(purpose==='item'){
       state.editImagePath=data.path;state.editImageURL=data.url;renderApp();
     } else if(purpose==='logo'){
-      await request('/api/business',{method:'PUT',...jsonBody({name:state.business.name,description:state.business.description,whatsapp:state.business.whatsapp,logo_path:data.path})});
+      const form=document.getElementById('business-form');const draft=form?new FormData(form):null;
+      await request('/api/business',{method:'PUT',...jsonBody({name:draft?.get('name')||state.business.name,description:draft?.get('description')||state.business.description,whatsapp:draft?.get('whatsapp')||state.business.whatsapp,logo_path:data.path})});
       await reload();
     }
     toast('Imagem enviada e salva.');
