@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: vitrine-beta-0
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm run check
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: SUPABASE_URL
+        value: https://uxoxxkufmqtkgyvpynyy.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITRINE_ADMIN_EMAIL
+        sync: false
