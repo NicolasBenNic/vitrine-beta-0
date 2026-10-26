@@ -1,0 +1,20 @@
+name: Testar Vitrine Beta
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  offline-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verificar sintaxe
+        run: npm run check
+      - name: Testar HTTP e arquivos
+        run: npm test
