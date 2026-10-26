@@ -145,6 +145,15 @@ async function getUser(req, res) {
   return user;
 }
 function isAdmin(user) { return Boolean(ADMIN && String(user.email || '').toLowerCase() === ADMIN); }
+async function isTester(user) {
+  const rows = await select('beta_testers', {
+    user_id: 'eq.' + user.id,
+    enabled: 'eq.true',
+    select: 'user_id',
+    limit: '1'
+  });
+  return rows.length > 0;
+}
 async function ownBusiness(user, create = true) {
   const existing = await select('businesses', { owner_id: 'eq.' + user.id, select: '*', limit: '1' });
   if (existing[0]) return existing[0];
@@ -248,7 +257,7 @@ async function api(req, res, pathname) {
   const user = await getUser(req, res);
   if (pathname === '/api/me' && req.method === 'GET') {
     const business = await ownBusiness(user);
-    return json(res, 200, { user: { id: user.id, email: user.email, isAdmin: isAdmin(user) }, business: publicBusiness(business), items: (await ownItems(business)).map(publicItem) });
+    return json(res, 200, { user: { id: user.id, email: user.email, isAdmin: isAdmin(user), isTester: await isTester(user) }, business: publicBusiness(business), items: (await ownItems(business)).map(publicItem) });
   }
   if (pathname === '/api/business' && req.method === 'PUT') {
     const business = await ownBusiness(user);
