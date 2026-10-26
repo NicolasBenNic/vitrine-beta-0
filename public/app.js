@@ -150,7 +150,7 @@ function renderApp() {
     '<div><p class="kicker" style="margin:0 12px 15px">painel de criação</p><nav class="nav">' +
     navigation.map(([tab,icon,label])=>'<button type="button" data-action="tab" data-tab="'+tab+'" class="'+(state.tab===tab?'active':'')+'"><span>'+icon+'</span> '+label+'</button>').join('') +
     '</nav></div><div class="sidebar-bottom"><div class="side-user">'+esc(state.user.email)+'</div><button class="plain-btn" type="button" data-action="logout">Sair da conta ↗</button></div></aside>' +
-    '<main class="main"><div class="content"><div class="topbar"><span class="kicker">Vitrine Beta · exclusivo</span><div class="topbar-right"><span class="pill '+(state.business.is_published?'green':'')+'">'+(state.business.is_published?'Publicado':'Rascunho')+'</span></div></div>' +
+    '<main class="main"><div class="content"><div class="topbar"><span class="kicker">Vitrine Beta · exclusivo</span><div class="topbar-right">'+(state.user.isTester?'<span class="pill purple">Tester · acesso ativo</span>':'')+'<span class="pill '+(state.business.is_published?'green':'')+'">'+(state.business.is_published?'Publicado':'Rascunho')+'</span></div></div>' +
     content()+'</div></main></div>'+itemModal();
 }
 async function reload() {
