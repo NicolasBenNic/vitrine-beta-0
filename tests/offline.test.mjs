@@ -29,5 +29,18 @@ test('servidor inicia sem pacotes npm e expõe SPA/health check', async () => {
     assert.equal(publicPage.status,200);
     const blocked=await fetch('http://127.0.0.1:'+port+'/private-file.txt');
     assert.equal(blocked.status,404);
+    const css=await fetch('http://127.0.0.1:'+port+'/style.css');
+    assert.equal(css.status,200);
+    const stylesheet=await css.text();
+    for(const font of ['DM+Sans','DM+Mono','Playfair+Display'])
+      assert.ok(stylesheet.includes(font),'Fonte ausente: '+font);
+    const guest=await fetch('http://127.0.0.1:'+port+'/api/me');
+    assert.equal(guest.status,401);
+    const invalidInvite=await fetch('http://127.0.0.1:'+port+'/api/auth/register',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:'test@example.com',password:'long-password-test',businessName:'Teste',invite:''})
+    });
+    assert.equal(invalidInvite.status,403);
   } finally { proc.kill('SIGTERM'); }
 });
