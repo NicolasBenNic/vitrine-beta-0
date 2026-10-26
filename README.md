@@ -37,6 +37,23 @@ No Supabase vitrine-beta, entre em Authentication → Users → Add user. Cadast
 
 Cadastro público fica bloqueado na aplicação. Recomenda-se também desabilitar registros abertos nas opções de Email de Supabase Auth, pois este app usa criação de usuários pelo servidor somente mediante convite.
 
+## Cadastro de testers internos
+
+A tabela `public.beta_testers` guarda os usuários autorizados a atuar como testers internos. Sua conta de administrador já foi cadastrada diretamente no Supabase com `enabled = true`; não há nova senha e não foi criada outra conta.
+
+Ao entrar, uma conta tester ativa recebe o selo **Tester · acesso ativo**. O tester continua usando exatamente as funções normais do usuário convidado: editar os dados do negócio, criar/editar/excluir itens, carregar fotos, visualizar, publicar/despublicar e compartilhar. Apenas o administrador mantém o menu de convites.
+
+Cada usuário mantém sua própria vitrine; o cadastro de tester não permite editar vitrines alheias e não altera as regras de convite para novos usuários. O status de tester é consultado no servidor por ID do usuário autenticado.
+
+Para cadastrar outros testers, primeiro crie/convide a conta com o fluxo normal de convites; depois adicione o `auth.users.id` e email correspondente em `public.beta_testers` pelo SQL Editor do Supabase. O arquivo `supabase/migrations/20261026_beta_testers.sql` documenta a estrutura da tabela. Desativar `enabled` remove o selo de tester, mas não desativa automaticamente uma conta Auth.
+
+## Atualização visual
+
+- **DM Sans**: textos, formulários, botões e navegação.
+- **DM Mono**: rótulos auxiliares, selos e microinformações.
+- **Playfair Display**: títulos editoriais e nomes em destaque na vitrine.
+- Cards com bordas leves, cantos suaves, quase nenhuma sombra e maior espaçamento vertical.
+
 ## Primeiro teste com o barbeiro
 
 1. Administrador entra com email/senha criados no Supabase.
@@ -50,6 +67,7 @@ Cadastro público fica bloqueado na aplicação. Recomenda-se também desabilita
 ## Banco já criado
 
 - public.beta_invites: RLS sem políticas, acesso somente do backend com chave secreta.
+- public.beta_testers: RLS com leitura permitida somente ao próprio usuário; escrita reservada ao backend/administrador do banco.
 - public.businesses: RLS por proprietário.
 - public.catalog_items: RLS por proprietário.
 - Storage público vitrine-media para imagens de catálogo.
