@@ -1,5 +1,7 @@
 # Vitrine Beta — acesso por convite
 
+> **Documentação para desenvolvedores (handoff, 18/11/2026):** comece por [docs/00-LEIA-PRIMEIRO.md](docs/00-LEIA-PRIMEIRO.md). O material diferencia o Beta existente do **Vitrine Mini** em desenvolvimento no Google AI Studio e inclui [escopo](docs/01-PRODUTO-E-ESCOPO.md), [especificação das telas](docs/02-ESPECIFICACAO-FUNCIONAL-MINI.md), [arquitetura](docs/03-ARQUITETURA-BETA-ATUAL.md), [API e segurança](docs/04-DADOS-API-E-SEGURANCA.md), [arquitetura proposta](docs/05-ARQUITETURA-PROPOSTA-MINI.md), [setup](docs/06-AMBIENTES-SETUP-E-OPERACAO.md) e [roadmap/testes](docs/07-ROADMAP-TESTES-E-DECISOES.md).
+
 Versão beta enxuta e hospedável, independente do protótipo React inicial. O foco é o fluxo real de cadastro privado, configuração de negócio, catálogo de produtos/serviços, upload de fotos e publicação de um link público. Sem Analytics.
 
 ## Funcionalidades implementadas
