@@ -1,4 +1,4 @@
-# Convite de sócio com acesso ADM (prévia, NÃO publicado)
+# Convite de sócio com acesso ADM — documentação técnica
 
 ## Objetivo
 
@@ -27,9 +27,9 @@ Permitir que o fundador conceda ao sócio acesso próprio às cinco telas da Cen
 
 ## Mudança no banco (pendente de aprovação)
 
-Arquivo: `supabase/migrations/20261119_partner_admin_invites.sql`. Inclui `public.beta_invites.invite_role` com padrão `business` e valores permitidos `business` ou `coadmin`.
+Arquivo: `supabase/migrations/20261119_partner_admin_invites.sql`. Inclui `public.beta_invites.invite_role` com padrão `business` e valores permitidos `business`, `tester` ou `coadmin`.
 
-**A migração NÃO foi aplicada ao Supabase de produção.** O código não deve ser mesclado à `main` antes da aplicação da migração e de uma validação integrada.
+**A migração foi aplicada e verificada no Supabase de produção em 19/11/2026.** O código não deve ser mesclado à `main` antes da aplicação da migração e de uma validação integrada.
 
 ## API
 
