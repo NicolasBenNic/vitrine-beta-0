@@ -1,6 +1,6 @@
 # Vitrine Beta — separação de convites ADM / Testers
 
-**Status:** implementado na branch `feat/separar-convites-adm-testers`, aguardando migração de produção e publicação. **Não está ativo no site público**.
+**Status em 19/11/2026:** implementação em branch, aguardando merge/deploy. A migração de convites já foi aplicada e verificada no Supabase de produção.
 
 ## 1. Regra de produto
 
@@ -63,12 +63,12 @@ Arquivo: `supabase/migrations/20261119_partner_admin_invites.sql`.
 
 Adiciona `public.beta_invites.invite_role` com padrão `business` e constraint permitindo `business`, `coadmin` e `tester`. Os convites antigos preservam o comportamento de empresa.
 
-**Não publicar o backend antes de aplicar e verificar essa migração no Supabase real.**
+**Aplicação verificada em 19/11/2026:** coluna `invite_role` com default `business`, constraint `business|coadmin|tester`, sem mudar registros existentes.
 
 ## 7. Checklist para publicação
 
 1. Confirmar backup/exportação do banco e estado `ACTIVE_HEALTHY`.
-2. Aplicar migração com papel `invite_role`.
+2. Confirmar migração com papel `invite_role` (aplicada em 19/11/2026).
 3. Confirmar coluna, default e constraint com SQL.
 4. Fazer deploy de branch aprovada, observando Render e GitHub Actions.
 5. Testar **em navegador real** três contas distintas: fundador, admin convidado e tester convidado.
