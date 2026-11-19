@@ -46,6 +46,12 @@ test('servidor inicia sem pacotes npm e expõe SPA/health check', async () => {
       body:JSON.stringify({confirm:true})
     });
     assert.equal(businessUnpublish.status,401,'Moderação de negócios deve exigir autenticação');
+    const invites=await fetch('http://127.0.0.1:'+port+'/api/admin/invites');
+    assert.equal(invites.status,401,'Convites devem exigir login');
+    const cancelInvite=await fetch('http://127.0.0.1:'+port+'/api/admin/invites/11111111-1111-4111-8111-111111111111/cancel',{
+      method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})
+    });
+    assert.equal(cancelInvite.status,401,'Cancelamento de convite deve exigir login');
     const invalidInvite=await fetch('http://127.0.0.1:'+port+'/api/auth/register',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
