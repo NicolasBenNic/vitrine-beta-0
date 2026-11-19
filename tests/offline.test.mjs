@@ -64,6 +64,8 @@ test('servidor inicia sem pacotes npm e expõe SPA/health check', async () => {
       body:JSON.stringify({enabled:false,confirm:true})
     });
     assert.equal(toggleTester.status,401,'Gestão de testers exige autenticação');
+    const systemHealth=await fetch('http://127.0.0.1:'+port+'/api/admin/system');
+    assert.equal(systemHealth.status,401,'Diagnóstico do sistema exige sessão administrativa');
     const invalidInvite=await fetch('http://127.0.0.1:'+port+'/api/auth/register',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
