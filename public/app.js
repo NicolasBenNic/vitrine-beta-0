@@ -2,7 +2,7 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -143,6 +143,101 @@ function adminSummaryPage() {
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Controle operacional, não analytics.</strong><p>Estes números representam registros do sistema. Não medimos visualizações, cliques ou comportamento dos visitantes.</p></div></div>'+
     '</section>';
 }
+function businessDate(value) {
+  if (!value) return '—';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
+}
+function businessLink(business) {
+  return location.origin + '/v/' + business.slug;
+}
+function filteredBusinesses() {
+  const rows=state.adminBusinesses?.businesses || [];
+  const query=String(state.adminBusinessQuery || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return rows.filter(b=>{
+    if(state.adminBusinessStatus==='published' && !b.isPublished) return false;
+    if(state.adminBusinessStatus==='draft' && b.isPublished) return false;
+    if(!query) return true;
+    const haystack=[b.name,b.slug,b.ownerEmail].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    return haystack.includes(query);
+  });
+}
+function adminBusinessRows() {
+  if (!state.adminBusinesses) return '';
+  const list=filteredBusinesses();
+  if(!list.length) return '<div class="ops-business-empty"><div class="ops-empty-figure">⌕</div><strong>Nenhum negócio encontrado</strong><p>Revise a busca ou o filtro selecionado.</p></div>';
+  return list.map(b=>
+    '<div class="ops-business-row">'+
+      '<div class="ops-business-name"><div class="ops-business-avatar" aria-hidden="true">'+esc(String(b.name||'?').charAt(0).toUpperCase())+'</div>'+
+      '<div class="ops-business-name-text"><strong>'+esc(b.name)+'</strong><span>'+esc(b.slug)+'</span></div></div>'+
+      '<div class="ops-business-owner"><span>'+esc(b.ownerEmail || 'E-mail indisponível')+'</span>'+(b.isTester?'<small>Tester interno</small>':'')+'</div>'+
+      '<div><span class="ops-business-status '+(b.isPublished?'published':'draft')+'"><i></i>'+(b.isPublished?'Publicada':'Rascunho')+'</span></div>'+
+      '<div class="ops-business-date">'+businessDate(b.createdAt)+'</div>'+
+      '<div class="ops-business-date">'+businessDate(b.updatedAt)+'</div>'+
+      '<div class="ops-business-actions"><button class="ops-business-view" type="button" data-action="business-details" data-id="'+esc(b.id)+'" aria-label="Ver negócio '+esc(b.name)+'">Ver detalhes <span aria-hidden="true">↗</span></button></div>'+
+    '</div>'
+  ).join('');
+}
+function renderBusinessRows() {
+  const container=document.getElementById('ops-business-list');
+  const count=document.getElementById('ops-business-results');
+  if(container) container.innerHTML=adminBusinessRows();
+  if(count) count.textContent=filteredBusinesses().length+' negócio(s) exibidos';
+}
+function businessDetailsPanel() {
+  if(!state.businessDetailId) return '';
+  const b=(state.adminBusinesses?.businesses||[]).find(x=>x.id===state.businessDetailId);
+  if(!b) return '';
+  return '<div class="modal-backdrop ops-detail-overlay"><div class="modal ops-detail-modal" role="dialog" aria-modal="true" aria-labelledby="ops-detail-title">'+
+    '<div class="ops-detail-head"><div><p class="kicker">Negócio cadastrado</p><h2 id="ops-detail-title">'+esc(b.name)+'</h2></div><button class="close" type="button" data-action="close-business-detail" aria-label="Fechar">×</button></div>'+
+    '<div class="ops-detail-status"><span class="ops-business-status '+(b.isPublished?'published':'draft')+'"><i></i>'+(b.isPublished?'Publicada':'Rascunho')+'</span>'+
+      (b.isTester?'<span class="pill purple">Tester</span>':'')+'</div>'+
+    '<dl class="ops-detail-grid">'+
+      '<div><dt>Responsável</dt><dd>'+esc(b.ownerEmail || 'E-mail indisponível')+'</dd></div>'+
+      '<div><dt>Criada em</dt><dd>'+businessDate(b.createdAt)+'</dd></div>'+
+      '<div><dt>Última alteração</dt><dd>'+businessDate(b.updatedAt)+'</dd></div>'+
+      '<div><dt>Endereço da vitrine</dt><dd class="ops-detail-slug">'+esc('/v/'+b.slug)+'</dd></div>'+
+      '<div class="ops-detail-full"><dt>Descrição</dt><dd>'+esc(b.description || 'Não informada')+'</dd></div>'+
+      '<div><dt>WhatsApp</dt><dd>'+esc(b.whatsapp || 'Não informado')+'</dd></div>'+
+    '</dl>'+
+    '<div class="ops-detail-foot">'+
+      (b.isPublished?
+        '<a class="button lime" href="'+esc(businessLink(b))+'" target="_blank" rel="noopener noreferrer">Abrir vitrine ↗</a>'+
+        '<button class="button secondary" type="button" data-action="copy-business-link" data-id="'+esc(b.id)+'">Copiar link</button>'+
+        '<button class="button danger" type="button" data-action="admin-unpublish" data-id="'+esc(b.id)+'">Retirar do ar</button>'
+       : '<p class="ops-detail-draft-note">Esta vitrine ainda não está pública. A publicação continua sob controle do proprietário.</p>')+
+    '</div>'+
+    '<p class="ops-detail-disclaimer">O administrador acompanha e pode retirar uma vitrine publicada do ar. Edição de conteúdo permanece com o proprietário.</p>'+
+  '</div></div>';
+}
+function adminBusinessesPage() {
+  if(!state.user?.isAdmin) return '<div class="empty">Acesso restrito ao administrador.</div>';
+  const data=state.adminBusinesses;
+  const loading=state.adminBusinessesLoading;
+  const erro=state.adminBusinessesError;
+  const details=data?'<div class="ops-business-section">'+
+    '<div class="ops-business-toolbar"><div class="ops-business-search-wrap"><span aria-hidden="true">⌕</span>'+
+      '<input type="search" id="ops-business-search" aria-label="Buscar negócios" placeholder="Buscar empresa, email ou slug" autocomplete="off" value="'+esc(state.adminBusinessQuery)+'"></div>'+
+      '<label class="ops-filter-label">Status<select id="ops-business-filter"><option value="todos"'+(state.adminBusinessStatus==='todos'?' selected':'')+'>Todos os negócios</option>'+
+      '<option value="published"'+(state.adminBusinessStatus==='published'?' selected':'')+'>Publicadas</option>'+
+      '<option value="draft"'+(state.adminBusinessStatus==='draft'?' selected':'')+'>Em rascunho</option></select></label></div>'+
+    '<div class="ops-business-table"><div class="ops-business-table-head"><span>NEGÓCIO</span><span>RESPONSÁVEL</span><span>STATUS</span><span>CADASTRO</span><span>ATUALIZAÇÃO</span><span></span></div>'+
+    '<div id="ops-business-list">'+adminBusinessRows()+'</div></div>'+
+    '<div class="ops-business-bottom"><span id="ops-business-results">'+filteredBusinesses().length+' negócio(s) exibidos</span>'+
+       (data.hasMore?'<span>Mostrando os 100 registros mais recentes</span>':'<span>Atualização manual · dados do sistema</span>')+'</div></div>' : '';
+  return '<section class="ops-page ops-business-page">'+
+    '<div class="ops-topline"><span class="ops-overline"><span class="ops-online-dot"></span> VITRINE / ADMINISTRAÇÃO</span><span class="pill purple">Área do fundador</span></div>'+
+    '<div class="ops-heading"><div><p class="kicker">Gestão de negócios</p><h1>Quem está<br><em>na Vitrine.</em></h1>'+
+    '<p class="lead">Acompanhe empresas, responsáveis e publicações. Controle simples para o beta crescer com organização.</p></div>'+
+    '<button class="button secondary ops-refresh" data-action="refresh-businesses" '+(loading?'disabled':'')+'>↻ Atualizar lista</button></div>'+
+    '<div class="ops-business-title"><div><h2>Negócios cadastrados</h2><p>Visualize detalhes e acompanhe o status de cada vitrine.</p></div>'+
+      '<span class="ops-business-total">'+(data?data.businesses.length.toLocaleString('pt-BR'):'—')+' REGISTROS</span></div>'+
+    (loading&&!data?'<div class="ops-empty">Carregando negócios cadastrados…</div>':
+      !data?'<div class="ops-error"><strong>Lista indisponível</strong><p>'+esc(erro || 'Não foi possível consultar os negócios.')+'</p><button class="button secondary" data-action="refresh-businesses">Tentar novamente</button></div>':
+      details)+
+    '<p class="ops-business-note">Os dados são exclusivos do administrador. Não há relatórios de comportamento, tráfego ou analytics.</p>'+
+    '</section>'+businessDetailsPanel();
+}
 function invitesPage() {
   if (!state.user.isAdmin) return '<div class="empty">Acesso restrito.</div>';
   return '<div class="section-panel"><div class="heading"><div><p class="kicker">beta privado</p><h1>Convide seus<br><em>primeiros clientes.</em></h1><p class="lead">Você controla quem pode criar uma vitrine. Quem visita as vitrines publicadas não precisa de convite.</p></div></div>' +
@@ -175,8 +270,8 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM']); navigation.push(['invites','✉','Convites beta']); }
-  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage}[state.tab] || homepage;
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios']); navigation.push(['invites','✉','Convites beta']); }
+  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
     navigation.map(([tab,icon,label])=>'<button type="button" data-action="tab" data-tab="'+tab+'" class="'+(state.tab===tab?'active':'')+'"><span>'+icon+'</span> '+label+'</button>').join('') +
@@ -202,6 +297,21 @@ async function loadAdminSummary() {
     state.adminSummaryError=error.message || 'Erro ao consultar o servidor.';
   } finally {
     state.adminSummaryLoading=false;
+    renderApp();
+  }
+}
+async function loadAdminBusinesses() {
+  if (!state.user?.isAdmin) return;
+  state.adminBusinessesLoading=true;
+  state.adminBusinessesError='';
+  renderApp();
+  try {
+    state.adminBusinesses=await request('/api/admin/businesses');
+  } catch(error) {
+    state.adminBusinesses=null;
+    state.adminBusinessesError=error.message || 'Falha na consulta.';
+  } finally {
+    state.adminBusinessesLoading=false;
     renderApp();
   }
 }
@@ -309,8 +419,24 @@ async function onClick(event) {
       }
       return;
     }
-    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();renderApp();}
+    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
+    else if(action==='refresh-businesses') {await loadAdminBusinesses();}
+    else if(action==='business-details'){state.businessDetailId=button.dataset.id;renderApp();}
+    else if(action==='close-business-detail'){state.businessDetailId=null;renderApp();}
+    else if(action==='copy-business-link'){const b=state.adminBusinesses?.businesses.find(x=>x.id===button.dataset.id);if(b&&b.isPublished)await copy(businessLink(b));}
+    else if(action==='admin-unpublish'){
+      const b=state.adminBusinesses?.businesses.find(x=>x.id===button.dataset.id);
+      if(!b||!b.isPublished)return;
+      if(!confirm('Retirar a vitrine "'+b.name+'" do ar? O proprietário poderá publicá-la novamente.'))return;
+      state.busy=true;
+      try {
+        await request('/api/admin/businesses/'+encodeURIComponent(b.id)+'/unpublish',{method:'POST',...jsonBody({confirm:true})});
+        state.businessDetailId=null;
+        state.adminSummary=null;
+        await loadAdminBusinesses();toast('Vitrine retirada do ar.');
+      } finally {state.busy=false;}
+    }
     else if(action==='logout'){await request('/api/auth/logout',{method:'POST'});state.user=null;state.business=null;renderAuth();}
     else if(action==='add-item'||action==='quick-add'){state.modal={};state.editDraft=null;state.editImagePath='';state.editImageURL='';renderApp();}
     else if(action==='edit-item'){const item=state.items.find(i=>i.id===button.dataset.id);if(item){state.modal={id:item.id};state.editDraft=null;state.editImagePath=item.image_path||'';state.editImageURL=item.image_url||'';renderApp();}}
@@ -346,6 +472,24 @@ async function onChange(event) {
     toast('Imagem enviada e salva.');
   }catch(e){toast(e.message,true);}finally{state.busy=false;}
 }
+
+root.addEventListener('input',event=>{
+  if(event.target.id==='ops-business-search'){
+    state.adminBusinessQuery=event.target.value;
+    renderBusinessRows();
+  }
+});
+root.addEventListener('change',event=>{
+  if(event.target.id==='ops-business-filter'){
+    state.adminBusinessStatus=event.target.value;
+    renderBusinessRows();
+  }
+});
+root.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&state.businessDetailId){
+    state.businessDetailId=null;renderApp();
+  }
+});
 root.addEventListener('submit',onForm);
 root.addEventListener('click',onClick);
 root.addEventListener('change',onChange);
