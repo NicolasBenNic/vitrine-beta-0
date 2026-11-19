@@ -8,6 +8,7 @@ on:
       - feat/admin-testers-preview
       - feat/admin-sistema-preview
       - feat/admin-socio-invite
+      - feat/separar-convites-adm-testers
   workflow_dispatch:
 jobs:
   validar:
