@@ -95,6 +95,32 @@ async function select(table, params) {
   const result = await call(query(table, params));
   return Array.isArray(result) ? result : [];
 }
+// Exact operational counts for the founder console. This runs only on the server.
+async function countRows(table, filters = {}) {
+  requireConfig();
+  const path = query(table, { select: 'id', ...filters });
+  const response = await fetch(SB + path, {
+    method: 'GET',
+    headers: {
+      apikey: SECRET,
+      Authorization: 'Bearer ' + SECRET,
+      Prefer: 'count=exact',
+      Range: '0-0'
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) {
+    console.error('Founder summary count failed:', table, response.status);
+    fail(502, 'Não foi possível carregar o resumo da operação.');
+  }
+  const header = response.headers.get('content-range') || '';
+  const match = /\/(\d+)$/.exec(header);
+  if (!match) {
+    console.error('Missing exact count for', table);
+    fail(502, 'Não foi possível conferir os totais da operação.');
+  }
+  return Number(match[1]);
+}
 async function insert(table, value) {
   const result = await call('/rest/v1/' + table, 'POST', value, { prefer: 'return=representation' });
   return result?.[0] || null;
@@ -317,6 +343,21 @@ async function api(req, res, pathname) {
     const result = await fetch(SB + '/storage/v1/object/vitrine-media/' + path, { method: 'POST', headers: { apikey: SECRET, Authorization: 'Bearer ' + SECRET, 'Content-Type': mime, 'x-upsert': 'false' }, body: data, signal: AbortSignal.timeout(20000) });
     if (!result.ok) { console.error('Upload error', result.status); fail(502, 'Falha ao enviar imagem.'); }
     return json(res, 201, { path, url: imageUrl(path) });
+  }
+  if (pathname === '/api/admin/summary' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const now = new Date();
+    const [businesses, published, drafts, pendingInvites, activeTesters] = await Promise.all([
+      countRows('businesses'),
+      countRows('businesses', { is_published: 'eq.true' }),
+      countRows('businesses', { is_published: 'eq.false' }),
+      countRows('beta_invites', { used_at: 'is.null', expires_at: 'gt.' + now.toISOString() }),
+      countRows('beta_testers', { enabled: 'eq.true' })
+    ]);
+    return json(res, 200, {
+      counts: { businesses, published, drafts, pendingInvites, activeTesters },
+      asOf: now.toISOString()
+    });
   }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
