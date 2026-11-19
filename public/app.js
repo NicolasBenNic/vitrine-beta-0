@@ -736,6 +736,24 @@ async function onForm(event) {
       await reload();toast('Serviço salvo.');
     } else if(form.id==='command-form') {
       await runCommand(String(fd.get('command')));
+     } else if(form.id==='admin-invite-form'||form.id==='tester-invite-form') {
+      const admin=form.id==='admin-invite-form';
+      if(admin&&!state.user?.isFounder)throw Error('Apenas o fundador pode enviar convites ADM.');
+      const role=admin?'coadmin':'tester';
+      const data=await request('/api/admin/invites',{
+        method:'POST',...jsonBody({email:fd.get('email'),role})
+      });
+      if(admin){
+        state.adminInviteLink=location.origin+data.path;
+        state.adminInviteEmail=data.email;
+        state.adminSummary=null;
+        await loadAdminSummary();
+      }else{
+        state.testerInviteLink=location.origin+data.path;
+        state.testerInviteEmail=data.email;
+        await loadAdminTesters();
+      }
+      toast('Convite '+(admin?'ADM':'de tester')+' gerado. Compartilhe o link.');
     } else if(form.id==='tester-create-form') {
       await request('/api/admin/testers',{method:'POST',...jsonBody({email:fd.get('email'),notes:fd.get('notes')})});
       state.adminSummary=null;state.testerQuery='';state.testerStatus='todos';
@@ -752,7 +770,7 @@ async function onForm(event) {
       state.inviteFilter='todos';state.inviteQuery='';
       await loadInvites();toast('Convite gerado. Copie e envie o link.');
     }
-  } catch(e) { toast(e.message,true); } finally { state.busy=false; if(form.id==='invite-form'&&state.user?.isAdmin)renderApp(); }
+  } catch(e) { toast(e.message,true); } finally { state.busy=false; if(['invite-form','admin-invite-form','tester-invite-form'].includes(form.id)&&state.user?.isAdmin)renderApp(); }
 }
 async function onClick(event) {
   const button=event.target.closest('[data-action]');
@@ -773,6 +791,28 @@ async function onClick(event) {
     }
     if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();if(state.tab==='admin-testers')await loadAdminTesters();if(state.tab==='admin-system')await loadAdminSystem();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
+    else if(action==='copy-admin-invite') {if(state.adminInviteLink)await copy(state.adminInviteLink);}
+    else if(action==='copy-tester-invite') {if(state.testerInviteLink)await copy(state.testerInviteLink);}
+    else if(action==='cancel-role-invite'){
+      const role=button.dataset.role;
+      if(!['coadmin','tester'].includes(role))return;
+      if(role==='coadmin'&&!state.user?.isFounder)return;
+      const current=(role==='coadmin'?state.adminInvites:state.testerInvites).find(i=>i.id===button.dataset.id);
+      if(!current||inviteStatus(current)!=='pending')return;
+      if(!confirm('Cancelar o convite para '+current.email+'? O link deixará de funcionar.'))return;
+      state.busy=true;
+      try{
+        await request('/api/admin/invites/'+encodeURIComponent(current.id)+'/cancel',{
+          method:'POST',...jsonBody({confirm:true})
+        });
+        if(role==='coadmin'){
+          state.adminInviteLink='';await loadAdminSummary();
+        }else{
+          state.testerInviteLink='';await loadAdminTesters();
+        }
+        toast('Convite cancelado.');
+      }finally{state.busy=false;renderApp();}
+    }
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
     else if(action==='refresh-invites') {await loadInvites();}
     else if(action==='revoke-partner'){
@@ -780,7 +820,7 @@ async function onClick(event) {
       if(!partner||!state.user.isFounder)return;
       if(!confirm('Revogar acesso administrativo de '+partner.email+'? A conta comum não será excluída.'))return;
       state.busy=true;
-      try {await request('/api/admin/partners/'+encodeURIComponent(partner.id)+'/revoke',{method:'POST',...jsonBody({confirm:true})});await loadInvites();toast('Acesso administrativo revogado.');}
+      try {await request('/api/admin/partners/'+encodeURIComponent(partner.id)+'/revoke',{method:'POST',...jsonBody({confirm:true})});await loadAdminSummary();toast('Acesso administrativo revogado.');}
       finally{state.busy=false;}
     }
     else if(action==='refresh-testers') {await loadAdminTesters();}
