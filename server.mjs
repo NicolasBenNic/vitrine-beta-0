@@ -416,6 +416,68 @@ async function api(req, res, pathname) {
     if (!updated.length) fail(409, 'O estado da vitrine mudou. Atualize a lista.');
     return json(res, 200, { success: true });
   }
+  // Testers are a pilot classification, not an authorization or login role.
+  // Management endpoints are restricted to the founder/admin on the server.
+  if (pathname === '/api/admin/testers' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [rows, businesses] = await Promise.all([
+      select('beta_testers', { select: 'user_id,email,enabled,notes,created_at', order: 'created_at.desc', limit: '101' }),
+      select('businesses', { select: 'owner_id,name,slug,is_published', limit: '500' })
+    ]);
+    const businessByOwner = new Map(businesses.map(b => [b.owner_id, b]));
+    const testers = rows.slice(0,100).map(t => {
+      const business = businessByOwner.get(t.user_id);
+      return {
+        userId: t.user_id,
+        email: t.email,
+        enabled: !!t.enabled,
+        notes: t.notes || '',
+        createdAt: t.created_at,
+        businessName: business?.name || null,
+        businessSlug: business?.slug || null,
+        businessPublished: business?.is_published || false
+      };
+    });
+    return json(res, 200, { testers, hasMore: rows.length > 100, asOf: new Date().toISOString() });
+  }
+  if (pathname === '/api/admin/testers' && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    rateLimit(req, 'tester', 25);
+    const body = await readJSON(req);
+    const email = cleanEmail(body.email);
+    const notes = maxText(body.notes || '', 280);
+    const current = await select('beta_testers', { email: 'eq.' + email, select: 'user_id', limit: '1' });
+    if (current.length) fail(409, 'Este email já está cadastrado como tester.');
+    let account = null;
+    // Supabase Auth Admin list endpoint. This search is bounded for the small beta.
+    // Do not guess an auth.users ID from a client-supplied email.
+    for (let page = 1; page <= 10; page++) {
+      const result = await call('/auth/v1/admin/users?page=' + page + '&per_page=200');
+      const users = Array.isArray(result?.users) ? result.users : [];
+      account = users.find(u => String(u?.email || '').toLowerCase() === email) || null;
+      if (account || users.length < 200) break;
+    }
+    if (!account?.id) fail(404, 'Conta não encontrada. Convide a pessoa primeiro.');
+    const inserted = await insert('beta_testers', { user_id: account.id, email, enabled: true, notes });
+    return json(res, 201, { success: true, userId: inserted?.user_id });
+  }
+  const testerMatch = /^\/api\/admin\/testers\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(pathname);
+  if (testerMatch && req.method === 'PATCH') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    const changes = {};
+    if (typeof body.enabled === 'boolean') {
+      if (body.enabled === false && body.confirm !== true) fail(409, 'Confirme a desativação do tester.');
+      changes.enabled = body.enabled;
+    }
+    if (body.notes !== undefined) changes.notes = maxText(body.notes, 280);
+    if (!Object.keys(changes).length) fail(400, 'Nenhuma alteração informada.');
+    const existing = await select('beta_testers', { user_id: 'eq.' + testerMatch[1], select: 'user_id,enabled', limit: '1' });
+    if (!existing[0]) fail(404, 'Tester não encontrado.');
+    const updated = await patch('beta_testers', { user_id: 'eq.' + testerMatch[1] }, changes);
+    if (!updated.length) fail(409, 'Não foi possível atualizar o tester.');
+    return json(res, 200, { success: true, enabled: updated[0].enabled });
+  }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
     const rows = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '101' });
