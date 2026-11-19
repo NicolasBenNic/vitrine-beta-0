@@ -36,6 +36,8 @@ test('servidor inicia sem pacotes npm e expõe SPA/health check', async () => {
       assert.ok(stylesheet.includes(font),'Fonte ausente: '+font);
     const guest=await fetch('http://127.0.0.1:'+port+'/api/me');
     assert.equal(guest.status,401);
+    const guestAdmin=await fetch('http://127.0.0.1:'+port+'/api/admin/summary');
+    assert.equal(guestAdmin.status,401, 'O resumo ADM não pode ser acessado sem login');
     const invalidInvite=await fetch('http://127.0.0.1:'+port+'/api/auth/register',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
