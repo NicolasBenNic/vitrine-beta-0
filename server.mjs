@@ -359,6 +359,63 @@ async function api(req, res, pathname) {
       asOf: now.toISOString()
     });
   }
+  if (pathname === '/api/admin/businesses' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [rows, testers, authResult] = await Promise.all([
+      select('businesses', {
+        select: 'id,owner_id,name,slug,description,whatsapp,is_published,created_at,updated_at',
+        order: 'created_at.desc',
+        limit: '101'
+      }),
+      select('beta_testers', { select: 'user_id,enabled', limit: '1000' }),
+      call('/auth/v1/admin/users?page=1&per_page=200')
+    ]);
+    const accounts = new Map();
+    const firstPage = Array.isArray(authResult?.users) ? authResult.users : [];
+    for (const account of firstPage) {
+      if (account?.id) accounts.set(account.id, account.email || null);
+    }
+    // The beta is limited to 100 businesses in this view. Fetch more Auth pages
+    // only if the current page did not cover all listed owners.
+    const selected = rows.slice(0, 100);
+    const ownerIds = new Set(selected.map(b => b.owner_id));
+    for (let page = 2; page <= 5 && [...ownerIds].some(id => !accounts.has(id)); page++) {
+      if (firstPage.length < 200 && page === 2) break;
+      const nextPage = await call('/auth/v1/admin/users?page=' + page + '&per_page=200');
+      const batch = Array.isArray(nextPage?.users) ? nextPage.users : [];
+      for (const account of batch) if (account?.id) accounts.set(account.id, account.email || null);
+      if (batch.length < 200) break;
+    }
+    const testerIds = new Set(testers.filter(t => t.enabled).map(t => t.user_id));
+    const businesses = selected.map(b => ({
+      id: b.id,
+      name: b.name,
+      slug: b.slug,
+      description: b.description || '',
+      whatsapp: b.whatsapp || '',
+      ownerEmail: accounts.get(b.owner_id) || null,
+      isTester: testerIds.has(b.owner_id),
+      isPublished: !!b.is_published,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at
+    }));
+    return json(res, 200, { businesses, hasMore: rows.length > 100, asOf: new Date().toISOString() });
+  }
+  const adminUnpublish = /^\/api\/admin\/businesses\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/unpublish$/.exec(pathname);
+  if (adminUnpublish && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    if (body.confirm !== true) fail(409, 'Confirme a retirada da vitrine do ar.');
+    const current = await select('businesses', { id: 'eq.' + adminUnpublish[1], select: 'id,name,is_published', limit: '1' });
+    if (!current[0]) fail(404, 'Negócio não encontrado.');
+    if (!current[0].is_published) return json(res, 200, { success: true, alreadyDraft: true });
+    const updated = await patch('businesses', { id: 'eq.' + adminUnpublish[1], is_published: 'eq.true' }, {
+      is_published: false,
+      updated_at: new Date().toISOString()
+    });
+    if (!updated.length) fail(409, 'O estado da vitrine mudou. Atualize a lista.');
+    return json(res, 200, { success: true });
+  }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
     const invites = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '100' });
