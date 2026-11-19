@@ -52,6 +52,18 @@ test('servidor inicia sem pacotes npm e expõe SPA/health check', async () => {
       method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})
     });
     assert.equal(cancelInvite.status,401,'Cancelamento de convite deve exigir login');
+    const testersList=await fetch('http://127.0.0.1:'+port+'/api/admin/testers');
+    assert.equal(testersList.status,401,'Testers não podem ser listados sem login');
+    const addTester=await fetch('http://127.0.0.1:'+port+'/api/admin/testers',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:'pessoa@example.test',notes:'Teste'})
+    });
+    assert.equal(addTester.status,401,'Cadastro de tester exige autenticação');
+    const toggleTester=await fetch('http://127.0.0.1:'+port+'/api/admin/testers/11111111-1111-4111-8111-111111111111',{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({enabled:false,confirm:true})
+    });
+    assert.equal(toggleTester.status,401,'Gestão de testers exige autenticação');
     const invalidInvite=await fetch('http://127.0.0.1:'+port+'/api/auth/register',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
