@@ -8,6 +8,7 @@ const partnerId = '55555555-5555-4555-8555-555555555555';
 const memberId = '44444444-4444-4444-8444-444444444444';
 const now = new Date().toISOString();
 const state = {
+  catalog_items: [],
   businesses: [{ id: businessId, owner_id: ownerId, name: 'Barbearia Exemplo', slug: 'barbearia-exemplo-123',
     description: '', whatsapp: '', is_published: true, created_at: now, updated_at: now }],
   beta_testers: [{ user_id: ownerId, email: 'admin@example.test', enabled: true, notes: 'Teste interno', created_at: now }],
