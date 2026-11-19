@@ -370,3 +370,125 @@ input:focus,select:focus,textarea:focus{
   .ops-detail-grid{grid-template-columns:1fr}
   .ops-detail-grid .ops-detail-full{grid-column:auto}
 }
+
+
+/* Etapa 3 — Gestão de Convites: founder console responsivo. */
+.ops-invite-page{max-width:1210px}
+.ops-invite-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px;margin-bottom:33px}
+.ops-invite-stat{min-height:153px;background:#fffefa;border:1px solid #eae8e2;border-radius:22px;padding:23px 25px;display:flex;flex-direction:column;gap:4px;box-shadow:0 5px 25px #30242d03}
+.ops-invite-stat.featured{background:#f0f5e5;border-color:#e2eacf}
+.ops-invite-stat-top{display:flex;justify-content:space-between;gap:10px;align-items:start;font-size:.8rem;font-weight:700;color:#5c565e}
+.ops-invite-stat-top small{font:500 .67rem 'DM Mono',monospace;color:#958c99}
+.ops-invite-stat>strong{font-family:'DM Sans',sans-serif;font-size:3.05rem;line-height:1.24;letter-spacing:-.075em;margin:3px 0 0;font-weight:600}
+.ops-invite-stat>p{font-size:.77rem;color:#8b858f;margin:0}
+.ops-invite-layout{display:grid;grid-template-columns:minmax(0,1.68fr) minmax(290px,.8fr);gap:22px;align-items:start}
+.ops-invite-list-panel{min-width:0;background:#fffefa;border:1px solid #e9e7e1;border-radius:25px;padding:29px 29px 17px;box-shadow:0 6px 26px #322c2f04}
+.ops-invite-section-head{display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:26px}
+.ops-invite-section-head h2{font-size:1.15rem;letter-spacing:-.026em;margin:0 0 7px;font-weight:700}
+.ops-invite-section-head p{color:#8c8790;font-size:.79rem;margin:0;line-height:1.55}
+.ops-invite-records{font:500 .63rem 'DM Mono',monospace;letter-spacing:.04em;color:#878189;white-space:nowrap;padding:7px 11px;border:1px solid #eae7e0;border-radius:100px;background:#faf9f5}
+.ops-invite-filterbar{margin-bottom:20px}
+.ops-invite-searchbox{position:relative}
+.ops-invite-searchbox span{position:absolute;left:15px;top:50%;transform:translateY(-53%);font-size:1.55rem;color:#a69fad;pointer-events:none}
+.ops-invite-searchbox input{height:47px;padding:12px 15px 12px 42px;background:#faf9f7;font-size:.83rem}
+.ops-invite-searchbox input::placeholder{color:#a09aa4}
+.ops-invite-tabs{display:flex;gap:7px;overflow-x:auto;padding:16px 0 4px;margin-bottom:2px;scrollbar-width:thin}
+.ops-invite-tabs button{border:1px solid #e9e7e1;background:#fcfbf9;color:#827b85;border-radius:100px;padding:9px 12px;font-weight:600;font-size:.72rem;white-space:nowrap;flex-shrink:0;line-height:1}
+.ops-invite-tabs button.active{border-color:#e3ebcd;background:#eef4dd;color:#566e3a}
+.ops-invite-tabs button span{font-family:'DM Mono',monospace;font-size:.6rem;margin-left:6px;color:inherit;opacity:.8}
+.ops-invite-table{border-top:1px solid #efede8}
+.ops-invite-table-head,.ops-invite-row{display:grid;grid-template-columns:minmax(145px,1.65fr) minmax(95px,.8fr) minmax(90px,.75fr) minmax(80px,.55fr);column-gap:12px;align-items:center}
+.ops-invite-table-head{padding:18px 8px 16px;font:500 .61rem 'DM Mono',monospace;letter-spacing:.06em;color:#9a949a}
+.ops-invite-row{padding:17px 8px;border-top:1px solid #f0eee9;min-height:78px;gap:10px}
+.ops-invite-person{display:flex;align-items:center;gap:11px;min-width:0}
+.ops-invite-avatar{width:40px;height:40px;border-radius:13px;background:#ebe6f4;color:#765c9a;display:grid;place-items:center;flex-shrink:0;font:600 1.05rem 'Playfair Display',serif}
+.ops-invite-row:nth-child(3n+2) .ops-invite-avatar{background:#ecf1e0;color:#6b8456}
+.ops-invite-row:nth-child(3n+3) .ops-invite-avatar{background:#f3eae4;color:#a0755d}
+.ops-invite-email{min-width:0}
+.ops-invite-email strong{font-size:.79rem;display:block;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.ops-invite-email span{display:block;font-size:.68rem;color:#aaa3ad;margin-top:5px}
+.ops-invite-expiry{font:.65rem 'DM Mono',monospace;color:#918993;line-height:1.5}
+.ops-invite-status{display:inline-flex;align-items:center;gap:6px;padding:7px 9px;border-radius:100px;background:#f2f0ee;color:#8d858d;font-size:.69rem;white-space:nowrap}
+.ops-invite-status i{height:6px;width:6px;border-radius:100%;background:currentColor}
+.ops-invite-status.pending{background:#eff2e0;color:#718345}
+.ops-invite-status.used{background:#eae6f6;color:#7761b1}
+.ops-invite-status.cancelled{background:#f9eae9;color:#a25d60}
+.ops-invite-actions{text-align:right}
+.ops-invite-text-btn{background:transparent;color:#6c56a6;border:0;padding:9px 0;font-size:.74rem;font-weight:700;white-space:nowrap}
+.ops-invite-text-btn.danger{color:#a7666a}
+.ops-invite-text-btn:hover{text-decoration:underline}
+.ops-invite-empty{text-align:center;padding:43px 15px;color:#96909a}
+.ops-invite-empty strong{color:#5d5862}
+.ops-invite-empty p{font-size:.78rem;margin:7px 0}
+.ops-invite-list-foot{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;border-top:1px solid #efede8;padding:18px 8px 0;font:400 .65rem 'DM Mono',monospace;color:#a099a2}
+.ops-invite-compose{background:#fffefa;border:1px solid #eae7e0;border-radius:25px;padding:27px;box-shadow:0 6px 26px #322c2f04}
+.ops-invite-compose-head{display:flex;justify-content:space-between;align-items:center;gap:9px;margin-bottom:29px}
+.ops-invite-compose-icon{display:grid;place-items:center;height:42px;width:42px;border-radius:14px;background:#ece7f5;color:#7663a8;font-size:1.4rem}
+.ops-invite-compose h2{font-family:'Playfair Display',Georgia,serif;font-size:1.75rem;font-weight:500;line-height:1.22;letter-spacing:-.035em;margin:0 0 14px}
+.ops-invite-compose>p{color:#89848b;font-size:.84rem;line-height:1.7;margin-bottom:27px}
+.ops-invite-compose label{font-size:.79rem;color:#545058}
+.ops-invite-compose input{margin-top:2px;font-size:.82rem;background:#faf9f7}
+.ops-invite-validity{display:flex;gap:12px;align-items:center;padding:15px 0 18px;margin-top:9px;border-bottom:1px solid #eeece8}
+.ops-invite-validity>span{display:grid;place-items:center;width:31px;height:31px;border-radius:50%;background:#edf1e2;color:#64734f;font-size:1.25rem}
+.ops-invite-validity strong{display:block;font-size:.78rem;color:#5e5860}
+.ops-invite-validity small{display:block;font-size:.71rem;color:#9d969f;margin-top:3px}
+.ops-invite-create{display:flex;justify-content:space-between;width:100%;margin-top:22px;background:#29262d}
+.ops-invite-compose-note{margin:19px 0 0!important;padding-top:17px;border-top:1px solid #efede8;font-size:.73rem!important;color:#989198!important;line-height:1.6!important}
+.ops-invite-created{display:grid;grid-template-columns:38px 1fr;gap:16px;padding:23px 25px;border:1px solid #dce9cd;background:#f1f7e8;border-radius:23px;margin-top:22px}
+.ops-invite-created-icon{display:grid;place-items:center;width:37px;height:37px;background:#d8e9c3;color:#4e7649;border-radius:12px;font-size:1.1rem}
+.ops-invite-created strong{font-size:.95rem}
+.ops-invite-created p{font-size:.78rem;color:#6c7965;line-height:1.65;margin:7px 0 14px}
+.ops-invite-generated-link{padding:13px 14px;background:#fffefa;border-radius:12px;border:1px solid #dfebd7;font:400 .72rem 'DM Mono',monospace;overflow-wrap:anywhere;margin:0 0 13px;color:#5a6253}
+.ops-invite-created .button{font-size:.77rem}
+@media(max-width:1120px){
+  .ops-invite-layout{grid-template-columns:minmax(0,1fr) 280px;gap:16px}
+  .ops-invite-list-panel{padding:22px}
+  .ops-invite-table-head,.ops-invite-row{grid-template-columns:minmax(140px,1.5fr) minmax(78px,.8fr) minmax(80px,.8fr)}
+  .ops-invite-table-head span:nth-child(2),.ops-invite-expiry{display:none}
+  .ops-invite-compose{padding:22px}
+}
+@media(max-width:900px){
+  .ops-invite-layout{grid-template-columns:1fr}
+  .ops-invite-compose{grid-row:1}
+  .ops-invite-stats{gap:11px}
+  .ops-invite-stat{padding:19px}
+}
+@media(max-width:740px){
+  .ops-invite-page .ops-heading{margin-bottom:32px}
+  .ops-invite-stats{margin-bottom:19px;gap:9px}
+  .ops-invite-stat{padding:16px;min-height:125px;border-radius:18px}
+  .ops-invite-stat-top{font-size:.72rem}
+  .ops-invite-stat-top small{display:none}
+  .ops-invite-stat>strong{font-size:2.4rem}
+  .ops-invite-stat>p{font-size:.65rem;line-height:1.45}
+  .ops-invite-compose{padding:23px;max-width:none;border-radius:22px}
+  .ops-invite-compose-head{margin-bottom:16px}
+  .ops-invite-compose h2{font-size:1.65rem}
+  .ops-invite-compose>p{margin-bottom:19px}
+  .ops-invite-list-panel{background:transparent;border:0;padding:0;box-shadow:none}
+  .ops-invite-section-head{padding:4px 2px 0}
+  .ops-invite-filterbar{margin-bottom:12px}
+  .ops-invite-table{border:0}
+  .ops-invite-table-head{display:none}
+  .ops-invite-row{display:grid;grid-template-columns:1fr auto;gap:15px;padding:18px;border:1px solid #eae7e1;background:#fffefa;margin-bottom:10px;border-radius:19px}
+  .ops-invite-person{grid-column:1/2;grid-row:1}
+  .ops-invite-row>div:nth-child(3){grid-column:2;grid-row:1}
+  .ops-invite-expiry{display:block;grid-column:1/-1;grid-row:2}
+  .ops-invite-actions{grid-column:1/-1;grid-row:3;border-top:1px solid #efede9;padding-top:6px;text-align:left}
+  .ops-invite-text-btn{width:100%;text-align:left}
+  .ops-invite-list-foot{border:0;padding:7px 4px}
+  .ops-invite-created{grid-template-columns:1fr;padding:20px}
+}
+@media(max-width:430px){
+  .ops-invite-stat{padding:14px 11px;min-height:121px}
+  .ops-invite-stat-top{font-size:.67rem}
+  .ops-invite-stat>strong{font-size:2.2rem}
+  .ops-invite-stat>p{font-size:.62rem}
+  .ops-invite-row{padding:16px 13px}
+  .ops-invite-avatar{width:34px;height:34px}
+  .ops-invite-email strong{font-size:.75rem}
+  .ops-invite-status{font-size:.64rem;padding:7px}
+  .ops-invite-section-head h2{font-size:1.05rem}
+  .ops-invite-records{font-size:.58rem}
+  .ops-invite-tabs button{padding:8px 11px}
+}
