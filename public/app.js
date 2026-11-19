@@ -240,7 +240,7 @@ function adminBusinessesPage() {
 }
 function inviteStatus(invite) {
   if(invite.used_at) return 'used';
-  if(invite.expires_at==='2000-01-01T00:00:00.000Z') return 'cancelled';
+  if(new Date(invite.expires_at).getTime()===Date.UTC(2000,0,1)) return 'cancelled';
   if(new Date(invite.expires_at).getTime()<=Date.now()) return 'expired';
   return 'pending';
 }
@@ -484,7 +484,7 @@ async function onForm(event) {
       state.inviteFilter='todos';state.inviteQuery='';
       await loadInvites();toast('Convite gerado. Copie e envie o link.');
     }
-  } catch(e) { toast(e.message,true); } finally { state.busy=false; }
+  } catch(e) { toast(e.message,true); } finally { state.busy=false; if(form.id==='invite-form'&&state.user?.isAdmin)renderApp(); }
 }
 async function onClick(event) {
   const button=event.target.closest('[data-action]');
