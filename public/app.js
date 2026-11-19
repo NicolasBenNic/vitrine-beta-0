@@ -562,6 +562,20 @@ async function loadAdminSummary() {
   renderApp();
   try {
     state.adminSummary=await request('/api/admin/summary');
+    if(state.user.isFounder){
+      const [invitations,partners]=await Promise.allSettled([
+        request('/api/admin/invites?role=coadmin'),
+        request('/api/admin/partners')
+      ]);
+      if(invitations.status==='fulfilled'){
+        state.adminInvites=invitations.value.invites||[];
+        state.adminInviteError='';
+      }else state.adminInviteError='Não foi possível consultar convites ADM.';
+      if(partners.status==='fulfilled'){
+        state.partners=partners.value.partners||[];
+        state.partnersError='';
+      }else state.partnersError='Não foi possível consultar os administradores.';
+    }
   } catch (error) {
     state.adminSummary=null;
     state.adminSummaryError=error.message || 'Erro ao consultar o servidor.';
@@ -606,8 +620,17 @@ async function loadAdminTesters(){
   state.testersError='';
   renderApp();
   try{
-    state.testers=await request('/api/admin/testers');
+    const [testers,invites]=await Promise.allSettled([
+      request('/api/admin/testers'),
+      request('/api/admin/invites?role=tester')
+    ]);
+    if(testers.status==='rejected')throw testers.reason;
+    state.testers=testers.value;
     state.testersLoaded=true;
+    if(invites.status==='fulfilled'){
+      state.testerInvites=invites.value.invites||[];
+      state.testerInviteError='';
+    }else state.testerInviteError='Não foi possível consultar os convites de testers.';
   }catch(error){
     state.testersError=error.message||'Erro na consulta.';
     if(!state.testersLoaded)state.testers=null;
