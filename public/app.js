@@ -2,7 +2,7 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -238,19 +238,88 @@ function adminBusinessesPage() {
     '<p class="ops-business-note">Os dados são exclusivos do administrador. Não há relatórios de comportamento, tráfego ou analytics.</p>'+
     '</section>'+businessDetailsPanel();
 }
-function invitesPage() {
-  if (!state.user.isAdmin) return '<div class="empty">Acesso restrito.</div>';
-  return '<div class="section-panel"><div class="heading"><div><p class="kicker">beta privado</p><h1>Convide seus<br><em>primeiros clientes.</em></h1><p class="lead">Você controla quem pode criar uma vitrine. Quem visita as vitrines publicadas não precisa de convite.</p></div></div>' +
-    '<section class="card"><div class="card-head"><div><h2>Criar convite individual</h2><p>Validade de 14 dias · uso único</p></div></div>' +
-    '<form id="invite-form"><label class="field">Email do convidado<input type="email" name="email" required placeholder="barbeiro@exemplo.com"></label>' +
-    '<div class="actions"><button type="submit" class="button lime">Gerar convite →</button></div></form>' +
-    (state.inviteLink?'<div class="divider"></div><p class="small"><strong>Link gerado — copie e envie ao convidado:</strong></p><p class="publish-url">' + esc(state.inviteLink) + '</p>' +
-    '<button class="button secondary" data-action="copy-invite">Copiar convite</button>':'') +
-    '</section><section class="card" style="margin-top:22px"><h2>Convites gerados</h2>' +
-    (!state.invites.length?'<p class="muted small">Nenhum convite gerado ainda.</p>':state.invites.map(i => '<div class="invite-row"><div><strong>' + esc(i.email) + '</strong><br><span class="tiny muted">Expira: '+new Date(i.expires_at).toLocaleDateString('pt-BR')+'</span></div>' +
-    '<span class="badge '+(i.used_at?'used':'')+'">'+(i.used_at?'Utilizado':new Date(i.expires_at)<new Date()?'Expirado':'Pendente')+'</span></div>').join('')) +
-    '</section></div>';
+function inviteStatus(invite) {
+  if(invite.used_at) return 'used';
+  if(invite.expires_at==='2000-01-01T00:00:00.000Z') return 'cancelled';
+  if(new Date(invite.expires_at).getTime()<=Date.now()) return 'expired';
+  return 'pending';
 }
+function inviteDate(value) {
+  if(!value)return '—';
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?'—':date.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
+}
+function filteredInvites(){
+  const term=state.inviteQuery.trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return (state.invites||[]).filter(i=>(state.inviteFilter==='todos'||inviteStatus(i)===state.inviteFilter) &&
+    (!term || String(i.email).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(term)));
+}
+function inviteRow(i) {
+  const status=inviteStatus(i);
+  const labels={pending:'Pendente',used:'Utilizado',expired:'Expirado',cancelled:'Cancelado'};
+  return '<div class="ops-invite-row">'+
+    '<div class="ops-invite-person"><div class="ops-invite-avatar" aria-hidden="true">'+esc(String(i.email).charAt(0).toUpperCase())+'</div>'+
+    '<div class="ops-invite-email"><strong>'+esc(i.email)+'</strong><span>Enviado manualmente · '+inviteDate(i.created_at)+'</span></div></div>'+
+    '<div class="ops-invite-expiry">'+(status==='used'?'Usado em '+inviteDate(i.used_at):status==='cancelled'?'Acesso invalidado':'Até '+inviteDate(i.expires_at))+'</div>'+
+    '<div><span class="ops-invite-status '+status+'"><i></i>'+labels[status]+'</span></div>'+
+    '<div class="ops-invite-actions">'+
+      (status==='pending'?'<button class="ops-invite-text-btn danger" data-action="cancel-invite" data-id="'+esc(i.id)+'" type="button">Cancelar</button>':
+      '<button class="ops-invite-text-btn" data-action="repeat-invite" data-email="'+esc(i.email)+'" type="button">Novo convite ↗</button>')+
+    '</div></div>';
+}
+function updateInviteRows(){
+  const list=document.getElementById('ops-invite-list');
+  const count=document.getElementById('ops-invite-filtered-count');
+  if(list)list.innerHTML=filteredInvites().length?filteredInvites().map(inviteRow).join(''):'<div class="ops-invite-empty"><strong>Nenhum convite encontrado</strong><p>Tente outra busca ou escolha um filtro diferente.</p></div>';
+  if(count)count.textContent=filteredInvites().length+' registro(s) exibido(s)';
+}
+function invitesPage() {
+  if(!state.user?.isAdmin)return '<div class="empty">Acesso restrito ao administrador.</div>';
+  const ready=state.invitesLoaded;
+  const counts={pending:0,used:0,expired:0,cancelled:0};
+  for(const invitation of state.invites)counts[inviteStatus(invitation)]++;
+  const summary=[
+    {key:'pending',label:'Pendentes',description:'Aguardando cadastro',index:'01'},
+    {key:'used',label:'Utilizados',description:'Contas já ativadas',index:'02'},
+    {key:'expired',label:'Expirados',description:'Prazo encerrado',index:'03'}
+  ];
+  const statuses=[['todos','Todos'],['pending','Pendentes'],['used','Utilizados'],['expired','Expirados'],['cancelled','Cancelados']];
+  const feedback=state.inviteLink?
+    '<div class="ops-invite-created"><div class="ops-invite-created-icon">✓</div><div><strong>Convite pronto para enviar</strong><p>Link criado para '+esc(state.inviteLinkEmail)+'. Copie agora e encaminhe por WhatsApp. O link não poderá ser recuperado depois.</p>'+
+    '<div class="ops-invite-generated-link">'+esc(state.inviteLink)+'</div>'+
+    '<button class="button lime" data-action="copy-invite" type="button">Copiar link de convite <span aria-hidden="true">↗</span></button></div></div>' : '';
+  const summaryCards=summary.map(s=>'<article class="ops-invite-stat '+(s.key==='pending'?'featured':'')+'"><div class="ops-invite-stat-top"><span>'+s.label+'</span><small>'+s.index+'</small></div>'+
+    '<strong>'+((ready&& !state.invitesLoading)?counts[s.key]:ready?counts[s.key]:'—')+'</strong><p>'+s.description+'</p></article>').join('');
+  const list=state.invitesLoading&&!ready?'<div class="ops-empty">Carregando convites…</div>':
+    !ready?'<div class="ops-error"><strong>Convites indisponíveis</strong><p>'+esc(state.invitesError || 'Não foi possível consultar os convites.')+'</p><button class="button secondary" type="button" data-action="refresh-invites">Tentar novamente</button></div>':
+    '<div class="ops-invite-table"><div class="ops-invite-table-head"><span>CONVIDADO</span><span>VALIDADE</span><span>STATUS</span><span></span></div>'+
+    '<div id="ops-invite-list">'+(filteredInvites().length?filteredInvites().map(inviteRow).join(''):'<div class="ops-invite-empty"><strong>Nenhum convite encontrado</strong><p>Revise sua pesquisa ou o filtro escolhido.</p></div>')+'</div></div>'+
+    '<div class="ops-invite-list-foot"><span id="ops-invite-filtered-count">'+filteredInvites().length+' registro(s) exibido(s)</span>'+
+    '<span>'+(state.invitesHasMore?'Exibindo os 100 convites mais recentes':'Dados atualizados manualmente')+'</span></div>';
+  return '<section class="ops-page ops-invite-page">'+
+    '<div class="ops-topline"><span class="ops-overline"><span class="ops-online-dot"></span> VITRINE / ADMINISTRAÇÃO</span><span class="pill purple">Área do fundador</span></div>'+
+    '<div class="ops-heading"><div><p class="kicker">Gestão de convites</p><h1>Quem entra,<br><em>você decide.</em></h1>'+
+    '<p class="lead">Convide novos negócios para o beta, acompanhe os acessos e mantenha o cadastro fechado.</p></div>'+
+    '<button class="button secondary ops-refresh" type="button" data-action="refresh-invites" '+(state.invitesLoading?'disabled':'')+'>↻ Atualizar convites</button></div>'+
+    '<div class="ops-invite-stats">'+summaryCards+'</div>'+
+    '<div class="ops-invite-layout"><section class="ops-invite-list-panel"><div class="ops-invite-section-head"><div><h2>Convites enviados</h2><p>Histórico de acessos liberados para o beta.</p></div>'+
+    '<span class="ops-invite-records">'+(ready?state.invites.length:'—')+' REGISTROS</span></div>'+
+    '<div class="ops-invite-filterbar"><div class="ops-invite-searchbox"><span aria-hidden="true">⌕</span><input id="ops-invite-search" type="search" placeholder="Buscar e-mail do convidado" autocomplete="off" aria-label="Buscar convites" value="'+esc(state.inviteQuery)+'"></div>'+
+    '<div class="ops-invite-tabs" aria-label="Filtrar convites">'+statuses.map(s=>'<button type="button" data-action="invite-filter" data-filter="'+s[0]+'" class="'+(state.inviteFilter===s[0]?'active':'')+'">'+s[1]+(ready&&s[0]!=='todos'?'<span>'+counts[s[0]]+'</span>':'')+'</button>').join('')+'</div></div>'+
+    list+'</section>'+
+    '<aside class="ops-invite-compose"><div class="ops-invite-compose-head"><span class="ops-invite-compose-icon">✦</span><span class="pill green">Acesso exclusivo</span></div>'+
+    '<h2>Um novo negócio<br>começa aqui.</h2>'+
+    '<p>Gere um link individual para alguém testar e criar sua própria vitrine.</p>'+
+    '<form id="invite-form"><label class="field">E-mail do convidado<input id="ops-invite-email" name="email" type="email" maxlength="320" required placeholder="exemplo@empresa.com" autocomplete="email"></label>'+
+    '<div class="ops-invite-validity"><span aria-hidden="true">◷</span><div><strong>Validade: 14 dias</strong><small>O link funciona uma única vez</small></div></div>'+
+    '<button class="button primary ops-invite-create" type="submit" '+(state.busy?'disabled':'')+'>Gerar convite <span aria-hidden="true">↗</span></button></form>'+
+    '<p class="ops-invite-compose-note">O sistema não envia e-mail automaticamente. Você compartilha o link com a pessoa.</p>'+
+    '</aside></div>'+feedback+
+    '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Beta controlado, sem cadastro público.</strong>'+
+    '<p>Convites usados não podem ser reutilizados. Convites pendentes podem ser cancelados. Links antigos não ficam recuperáveis, por segurança.</p></div></div>'+
+    '</section>';
+}
+
 function itemModal() {
   if (!state.modal) return '';
   const item=state.modal.id ? state.items.find(i=>i.id===state.modal.id) : null;
@@ -317,8 +386,21 @@ async function loadAdminBusinesses() {
 }
 async function loadInvites() {
   if (!state.user?.isAdmin) return;
-  const data=await request('/api/admin/invites');
-  state.invites=data.invites||[];
+  state.invitesLoading=true;
+  state.invitesError='';
+  renderApp();
+  try {
+    const data=await request('/api/admin/invites');
+    state.invites=data.invites||[];
+    state.invitesHasMore=Boolean(data.hasMore);
+    state.invitesLoaded=true;
+  } catch(error) {
+    state.invitesError=error.message || 'Não foi possível carregar convites.';
+    if(!state.invitesLoaded)state.invites=[];
+  } finally {
+    state.invitesLoading=false;
+    renderApp();
+  }
 }
 function publicList() {
   const list=state.public?.items || [];
@@ -398,7 +480,9 @@ async function onForm(event) {
     } else if(form.id==='invite-form') {
       const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email')})});
       state.inviteLink=location.origin+data.path;
-      await loadInvites();renderApp();toast('Convite gerado. Copie e envie o link.');
+      state.inviteLinkEmail=data.email || String(fd.get('email'));
+      state.inviteFilter='todos';state.inviteQuery='';
+      await loadInvites();toast('Convite gerado. Copie e envie o link.');
     }
   } catch(e) { toast(e.message,true); } finally { state.busy=false; }
 }
@@ -422,6 +506,20 @@ async function onClick(event) {
     if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
+    else if(action==='refresh-invites') {await loadInvites();}
+    else if(action==='invite-filter') {state.inviteFilter=button.dataset.filter;renderApp();}
+    else if(action==='repeat-invite') {const field=document.getElementById('ops-invite-email');if(field){field.value=button.dataset.email;field.scrollIntoView({behavior:'smooth',block:'center'});field.focus();toast('E-mail preenchido. Confirme em Gerar convite.');}}
+    else if(action==='cancel-invite') {
+      const inv=state.invites.find(x=>x.id===button.dataset.id);
+      if(!inv || inviteStatus(inv)!=='pending')return;
+      if(!confirm('Cancelar o convite para '+inv.email+'? O link enviado deixará de funcionar.'))return;
+      state.busy=true;
+      try {
+        await request('/api/admin/invites/'+encodeURIComponent(inv.id)+'/cancel',{method:'POST',...jsonBody({confirm:true})});
+        state.inviteLink='';state.inviteLinkEmail='';state.adminSummary=null;
+        await loadInvites();toast('Convite cancelado.');
+      } finally {state.busy=false;}
+    }
     else if(action==='business-details'){state.businessDetailId=button.dataset.id;renderApp();}
     else if(action==='close-business-detail'){state.businessDetailId=null;renderApp();}
     else if(action==='copy-business-link'){const b=state.adminBusinesses?.businesses.find(x=>x.id===button.dataset.id);if(b&&b.isPublished)await copy(businessLink(b));}
@@ -474,6 +572,10 @@ async function onChange(event) {
 }
 
 root.addEventListener('input',event=>{
+  if(event.target.id==='ops-invite-search'){
+    state.inviteQuery=event.target.value;
+    updateInviteRows();
+  }
   if(event.target.id==='ops-business-search'){
     state.adminBusinessQuery=event.target.value;
     renderBusinessRows();
