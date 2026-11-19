@@ -97,7 +97,7 @@ globalThis.fetch = async (url, opts = {}) => {
     const limit = Number(u.searchParams.get('limit') || rows.length);
     rows = rows.slice(0, limit);
     if (method === 'POST') {
-      const inserted={id:randomUUID(),created_at:now,...body};
+      const inserted={id:randomUUID(),created_at:now,...(table==='beta_invites'?{used_at:null,invite_role:'business'}:{}),...body};
       state[table].push(inserted);
       return reply(201, [inserted]);
     }
