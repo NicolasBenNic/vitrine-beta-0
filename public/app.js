@@ -115,6 +115,46 @@ function publishPage() {
     (published?'<a class="button lime" target="_blank" rel="noopener noreferrer" href="' + esc(link()) + '">Abrir vitrine ↗</a>':'') +
     '</div></section></div>';
 }
+
+function roleInvitePanel(role) {
+  const admin=role==='coadmin';
+  if(admin&&!state.user?.isFounder)return '';
+  const links=admin?state.adminInvites:state.testerInvites;
+  const link=admin?state.adminInviteLink:state.testerInviteLink;
+  const email=admin?state.adminInviteEmail:state.testerInviteEmail;
+  const issue=admin?state.adminInviteError:state.testerInviteError;
+  const formId=admin?'admin-invite-form':'tester-invite-form';
+  const label=admin?'Administrador':'Tester';
+  const rows=(links||[]).slice(0,6);
+  const list=rows.length?
+    rows.map(i=>{
+      const status=inviteStatus(i);
+      const names={pending:'Pendente',used:'Utilizado',expired:'Expirado',cancelled:'Cancelado'};
+      return '<div class="ops-role-invite-row"><div><strong>'+esc(i.email)+'</strong>'+
+        '<small>'+inviteDate(i.created_at)+' · '+names[status]+'</small></div>'+
+        (status==='pending'?'<button type="button" data-action="cancel-role-invite" data-role="'+role+'" data-id="'+esc(i.id)+'">Cancelar</button>':'')+
+        '</div>';
+    }).join(''):
+    '<p class="ops-role-no-invites">Nenhum convite deste tipo registrado.</p>';
+  return '<section class="ops-role-invite '+(admin?'ops-role-admin':'ops-role-tester')+'">'+
+    '<div class="ops-role-invite-heading"><span class="ops-role-invite-icon">'+(admin?'◈':'✦')+'</span>'+
+    '<span class="pill '+(admin?'purple':'green')+'">'+(admin?'Acesso administrativo':'Teste fechado')+'</span></div>'+
+    '<h2>'+(admin?'Convidar para<br>a Central ADM.':'Convidar<br>um tester.')+'</h2>'+
+    '<p>'+(admin?'A pessoa receberá uma conta própria com acesso às cinco áreas de administração. Somente o fundador pode emitir convites ADM.':
+      'O participante poderá criar e administrar somente a própria vitrine, sem acesso aos dados privados de outras empresas.')+'</p>'+
+    '<form id="'+formId+'"><label class="field">E-mail do '+label.toLowerCase()+
+    '<input type="email" name="email" maxlength="320" required autocomplete="email" placeholder="pessoa@exemplo.com"></label>'+
+    '<div class="ops-role-invite-validity">Link único · válido por 14 dias</div>'+
+    '<button class="button primary ops-role-invite-button" type="submit">'+(admin?'Gerar convite ADM':'Gerar convite tester')+' <span aria-hidden="true">↗</span></button></form>'+
+    (link?'<div class="ops-role-invite-result"><strong>Convite de '+label+' criado</strong>'+
+      '<p>Copie e envie para '+esc(email)+'. O link só aparece agora.</p>'+
+      '<code>'+esc(link)+'</code>'+
+      '<button class="button lime" type="button" data-action="'+(admin?'copy-admin-invite':'copy-tester-invite')+'">Copiar link</button></div>':'')+
+    '<div class="ops-role-invite-history"><div class="ops-role-invite-history-head"><h3>Convites '+(admin?'ADM':'de tester')+'</h3>'+
+      '<span>'+links.length+' REGISTROS</span></div>'+
+    (issue?'<p class="ops-role-invite-error">'+esc(issue)+'</p>':'')+
+    list+'</div></section>';
+}
 function adminSummaryPage() {
   if (!state.user?.isAdmin) return '<div class="empty">Acesso restrito ao administrador.</div>';
   const s=state.adminSummary;
@@ -143,6 +183,7 @@ function adminSummaryPage() {
     '<button class="button secondary ops-refresh" data-action="refresh-summary" '+(state.adminSummaryLoading?'disabled':'')+'><span aria-hidden="true">↻</span> Atualizar dados</button></div>'+
     '<div class="ops-section-head"><h2>Panorama do beta</h2><span class="ops-asof">'+(s?'ATUALIZADO EM '+esc(date):state.adminSummaryLoading?'CARREGANDO':'SEM DADOS')+'</span></div>'+
     metrics+
+    (state.user.isFounder?'<div class="ops-role-admin-area">'+roleInvitePanel('coadmin')+partnersPanel()+'</div>':'')+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Controle operacional, não analytics.</strong><p>Estes números representam registros do sistema. Não medimos visualizações, cliques ou comportamento dos visitantes.</p></div></div>'+
     '</section>';
 }
