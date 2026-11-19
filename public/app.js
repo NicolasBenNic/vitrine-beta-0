@@ -1,8 +1,9 @@
 const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
+const partnerInvite = new URLSearchParams(location.search).get('partner') === '1';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', inviteLinkRole:'business', partners:[], partnersError:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -35,18 +36,19 @@ async function copy(value) {
 function logo() { return '<a class="brand" href="/"><span class="brand-icon">V.</span><span class="brand-word">vitrine<span style="color:#7967c2">.</span></span></a>'; }
 function renderAuth() {
   const registering = Boolean(inviteToken);
+  const partnerAccess = registering && partnerInvite;
   root.innerHTML = '<div class="auth-page"><div class="auth-art"><div>' +
     '<span class="pill purple">acesso exclusivo · beta</span><h1 style="margin-top:45px">Sua vitrine.<br><em>Seu negócio.</em><br>Seu jeito.</h1>' +
     '<p class="lead" style="color:#3d3a3f">Produtos, serviços e preços em um link simples para compartilhar com seus clientes.</p></div>' +
     '<p class="small">Vitrine Beta · acesso somente por convite</p></div>' +
     '<div class="auth-box"><form class="auth-form" id="auth-form">' + logo() +
-    '<span class="pill green">' + (registering?'Seu convite chegou':'Área de acesso') + '</span>' +
-    '<h2>' + (registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
-    '<p class="auth-hint">' + (registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
+    '<span class="pill green">' + (partnerAccess?'Convite de sócio · ADM':registering?'Seu convite chegou':'Área de acesso') + '</span>' +
+    '<h2>' + (partnerAccess?'Ativar acesso de sócio':registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
+    '<p class="auth-hint">' + (partnerAccess?'Use o e-mail do convite e sua senha. Se já tiver conta, use a senha atual. Caso contrário, crie uma senha com pelo menos 10 caracteres.':registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
     '<label class="field">Email<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>' +
-    (registering?'<label class="field">Nome do negócio<input name="businessName" maxlength="120" required placeholder="Ex.: Barbearia Central"></label>':'') +
+    (registering&&!partnerAccess?'<label class="field">Nome do negócio<input name="businessName" maxlength="120" required placeholder="Ex.: Barbearia Central"></label>':'') +
     '<label class="field">Senha<input name="password" type="password" autocomplete="' + (registering?'new-password':'current-password') + '" minlength="' + (registering?'10':'1') + '" required placeholder="Sua senha"></label>' +
-    '<button class="button lime" type="submit">' + (registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
+    '<button class="button lime" type="submit">' + (partnerAccess?'Ativar minha Central ADM':registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
     (registering?'<p class="auth-hint" style="margin-top:20px"><a href="/">Já tenho conta. Entrar</a></p>':'<p class="auth-hint" style="margin-top:20px">Ainda não recebeu convite? Peça um link para o administrador do Vitrine Beta.</p>') +
     '</form></div></div>';
 }
@@ -259,7 +261,7 @@ function inviteRow(i) {
   const labels={pending:'Pendente',used:'Utilizado',expired:'Expirado',cancelled:'Cancelado'};
   return '<div class="ops-invite-row">'+
     '<div class="ops-invite-person"><div class="ops-invite-avatar" aria-hidden="true">'+esc(String(i.email).charAt(0).toUpperCase())+'</div>'+
-    '<div class="ops-invite-email"><strong>'+esc(i.email)+'</strong><span>Enviado manualmente · '+inviteDate(i.created_at)+'</span></div></div>'+
+    '<div class="ops-invite-email"><strong>'+esc(i.email)+'</strong><span>'+(i.invite_role==='coadmin'?'Sócio · acesso ADM':'Empresa · vitrine')+' · '+inviteDate(i.created_at)+'</span></div></div>'+
     '<div class="ops-invite-expiry">'+(status==='used'?'Usado em '+inviteDate(i.used_at):status==='cancelled'?'Acesso invalidado':'Até '+inviteDate(i.expires_at))+'</div>'+
     '<div><span class="ops-invite-status '+status+'"><i></i>'+labels[status]+'</span></div>'+
     '<div class="ops-invite-actions">'+
@@ -273,6 +275,16 @@ function updateInviteRows(){
   if(list)list.innerHTML=filteredInvites().length?filteredInvites().map(inviteRow).join(''):'<div class="ops-invite-empty"><strong>Nenhum convite encontrado</strong><p>Tente outra busca ou escolha um filtro diferente.</p></div>';
   if(count)count.textContent=filteredInvites().length+' registro(s) exibido(s)';
 }
+function partnersPanel(){
+  if(!state.user?.isFounder)return '';
+  return '<section class="ops-partners"><div class="ops-partners-header"><div><p class="kicker">Equipe fundadora</p><h2>Sócios com acesso ADM</h2><p>Contas que podem usar a Central ADM. Apenas o fundador concede ou revoga esse acesso.</p></div>'+
+    '<span class="ops-business-total">'+state.partners.length+' SÓCIO(S)</span></div>'+
+    (state.partnersError?'<p class="ops-partners-error">'+esc(state.partnersError)+'</p>':'')+
+    (!state.partners.length?'<p class="ops-partners-empty">Nenhum sócio com acesso ADM registrado.</p>':
+     state.partners.map(p=>'<div class="ops-partner-row"><div><strong>'+esc(p.email)+'</strong><span>Central ADM · conta individual</span></div>'+
+       '<button class="button danger" type="button" data-action="revoke-partner" data-id="'+esc(p.id)+'">Revogar acesso</button></div>').join(''))+
+    '<p class="ops-partners-note">Revogar retira o acesso administrativo, mas não exclui a conta ou a vitrine pessoal da pessoa.</p></section>';
+}
 function invitesPage() {
   if(!state.user?.isAdmin)return '<div class="empty">Acesso restrito ao administrador.</div>';
   const ready=state.invitesLoaded;
@@ -285,7 +297,7 @@ function invitesPage() {
   ];
   const statuses=[['todos','Todos'],['pending','Pendentes'],['used','Utilizados'],['expired','Expirados'],['cancelled','Cancelados']];
   const feedback=state.inviteLink?
-    '<div class="ops-invite-created"><div class="ops-invite-created-icon">✓</div><div><strong>Convite pronto para enviar</strong><p>Link criado para '+esc(state.inviteLinkEmail)+'. Copie agora e encaminhe por WhatsApp. O link não poderá ser recuperado depois.</p>'+
+    '<div class="ops-invite-created"><div class="ops-invite-created-icon">✓</div><div><strong>Convite pronto para enviar</strong><p>'+(state.inviteLinkRole==='coadmin'?'Convite de sócio com acesso ADM':'Convite de empresa')+' criado para '+esc(state.inviteLinkEmail)+'. Copie agora e encaminhe por WhatsApp. O link não poderá ser recuperado depois.</p>'+
     '<div class="ops-invite-generated-link">'+esc(state.inviteLink)+'</div>'+
     '<button class="button lime" data-action="copy-invite" type="button">Copiar link de convite <span aria-hidden="true">↗</span></button></div></div>' : '';
   const summaryCards=summary.map(s=>'<article class="ops-invite-stat '+(s.key==='pending'?'featured':'')+'"><div class="ops-invite-stat-top"><span>'+s.label+'</span><small>'+s.index+'</small></div>'+
@@ -311,10 +323,11 @@ function invitesPage() {
     '<h2>Um novo negócio<br>começa aqui.</h2>'+
     '<p>Gere um link individual para alguém testar e criar sua própria vitrine.</p>'+
     '<form id="invite-form"><label class="field">E-mail do convidado<input id="ops-invite-email" name="email" type="email" maxlength="320" required placeholder="exemplo@empresa.com" autocomplete="email"></label>'+
+    (state.user.isFounder?'<label class="field ops-invite-role-field">Tipo de acesso<select name="role"><option value="business">Empresa · criar vitrine</option><option value="coadmin">Sócio · Central ADM</option></select></label>':'')+
     '<div class="ops-invite-validity"><span aria-hidden="true">◷</span><div><strong>Validade: 14 dias</strong><small>O link funciona uma única vez</small></div></div>'+
     '<button class="button primary ops-invite-create" type="submit" '+(state.busy?'disabled':'')+'>Gerar convite <span aria-hidden="true">↗</span></button></form>'+
     '<p class="ops-invite-compose-note">O sistema não envia e-mail automaticamente. Você compartilha o link com a pessoa.</p>'+
-    '</aside></div>'+feedback+
+    '</aside></div>'+feedback+partnersPanel()+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Beta controlado, sem cadastro público.</strong>'+
     '<p>Convites usados não podem ser reutilizados. Convites pendentes podem ser cancelados. Links antigos não ficam recuperáveis, por segurança.</p></div></div>'+
     '</section>';
@@ -569,6 +582,10 @@ async function loadInvites() {
   try {
     const data=await request('/api/admin/invites');
     state.invites=data.invites||[];
+    if(state.user.isFounder){
+      try { const response=await request('/api/admin/partners');state.partners=response.partners||[];state.partnersError=''; }
+      catch(error){ state.partnersError=error.message||'Não foi possível listar sócios.'; }
+    }
     state.invitesHasMore=Boolean(data.hasMore);
     state.invitesLoaded=true;
   } catch(error) {
@@ -631,8 +648,8 @@ async function onForm(event) {
   try {
     if(form.id==='auth-form') {
       const payload={email:fd.get('email'),password:fd.get('password')};
-      const action=inviteToken?'/api/auth/register':'/api/auth/login';
-      if(inviteToken){payload.invite=inviteToken;payload.businessName=fd.get('businessName');}
+      const action=inviteToken?(partnerInvite?'/api/auth/partner-accept':'/api/auth/register'):'/api/auth/login';
+      if(inviteToken){payload.invite=inviteToken;if(!partnerInvite)payload.businessName=fd.get('businessName');}
       await request(action,{method:'POST',...jsonBody(payload)});
       inviteToken=''; history.replaceState({},'', '/');
       await reload();toast('Bem-vindo à Vitrine.');
@@ -663,9 +680,10 @@ async function onForm(event) {
       await request('/api/admin/testers/'+encodeURIComponent(userId),{method:'PATCH',...jsonBody({notes:fd.get('notes')})});
       state.testerDetailId=null;await loadAdminTesters();toast('Observação salva.');
     } else if(form.id==='invite-form') {
-      const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email')})});
+      const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email'),role:fd.get('role')||'business'})});
       state.inviteLink=location.origin+data.path;
       state.inviteLinkEmail=data.email || String(fd.get('email'));
+      state.inviteLinkRole=data.role||'business';
       state.inviteFilter='todos';state.inviteQuery='';
       await loadInvites();toast('Convite gerado. Copie e envie o link.');
     }
@@ -692,6 +710,14 @@ async function onClick(event) {
     else if(action==='refresh-summary') {await loadAdminSummary();}
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
     else if(action==='refresh-invites') {await loadInvites();}
+    else if(action==='revoke-partner'){
+      const partner=state.partners.find(p=>p.id===button.dataset.id);
+      if(!partner||!state.user.isFounder)return;
+      if(!confirm('Revogar acesso administrativo de '+partner.email+'? A conta comum não será excluída.'))return;
+      state.busy=true;
+      try {await request('/api/admin/partners/'+encodeURIComponent(partner.id)+'/revoke',{method:'POST',...jsonBody({confirm:true})});await loadInvites();toast('Acesso administrativo revogado.');}
+      finally{state.busy=false;}
+    }
     else if(action==='refresh-testers') {await loadAdminTesters();}
     else if(action==='refresh-system') {await loadAdminSystem();}
     else if(action==='tester-filter') {state.testerStatus=button.dataset.filter;renderApp();}
@@ -804,6 +830,6 @@ root.addEventListener('keydown',event=>{
 root.addEventListener('submit',onForm);
 root.addEventListener('click',onClick);
 root.addEventListener('change',onChange);
-(async()=>{if(publicSlug)await loadPublic();else{
+(async()=>{if(publicSlug)await loadPublic();else if(inviteToken){renderAuth();}else{
   try {await reload();} catch(e){ if(e.message.includes('Entre na sua conta')||e.message.includes('Sessão')||e.message.includes('login'))renderAuth();else {renderAuth();toast(e.message,true);} }
 }})();
