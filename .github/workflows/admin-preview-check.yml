@@ -1,8 +1,9 @@
-name: Testar prévia ADM (etapa 1)
+name: Testar prévia ADM (etapas 1 e 2)
 on:
   push:
     branches:
       - feat/admin-resumo-preview
+      - feat/admin-negocios-preview
   workflow_dispatch:
 jobs:
   validar:
