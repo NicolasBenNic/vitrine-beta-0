@@ -451,15 +451,15 @@ function adminTestersPage() {
     '<button class="button secondary ops-refresh" type="button" data-action="refresh-testers" '+(loading?'disabled':'')+'>↻ Atualizar lista</button></div>'+
     countersHTML+
     '<div class="ops-testers-layout"><section class="ops-testers-panel"><div class="ops-testers-panel-head"><div><h2>Participantes do beta</h2>'+
-    '<p>Contas existentes que você marcou como testers.</p></div><span class="ops-tester-count">'+(data?list.length:'—')+' REGISTROS</span></div>'+
+    '<p>Pessoas convidadas ou marcadas para os testes do Vitrine.</p></div><span class="ops-tester-count">'+(data?list.length:'—')+' REGISTROS</span></div>'+
     listHTML+'</section>'+
-    '<aside class="ops-testers-create"><div class="ops-testers-create-top"><div class="ops-tester-add-icon">✦</div><span class="pill green">Beta fechado</span></div>'+
-    '<h2>Adicionar<br>um tester.</h2><p>Inclua alguém que já tenha criado uma conta no Vitrine. Não é necessário gerar outra senha.</p>'+
-    '<form id="tester-create-form"><label class="field">Email da conta<input name="email" type="email" placeholder="pessoa@exemplo.com" maxlength="320" autocomplete="email" required></label>'+
-    '<label class="field">Observação (opcional)<textarea name="notes" maxlength="280" rows="3" placeholder="Ex.: validar fluxo pelo celular"></textarea></label>'+
-    '<button class="button primary ops-tester-create-btn" type="submit">Adicionar tester <span>↗</span></button></form>'+
-    '<p class="ops-tester-create-note">A pessoa ainda não tem conta? Gere primeiro um convite na área de Convites Beta.</p>'+
-    '</aside></div>'+
+    roleInvitePanel('tester')+'</div>'+
+    '<details class="ops-existing-tester"><summary>O usuário já tem conta? Marcar como tester</summary>'+
+      '<p>Use esta opção apenas para pessoas que já se cadastraram. Não cria uma conta nem envia convite.</p>'+
+      '<form id="tester-create-form"><label class="field">E-mail da conta existente<input name="email" type="email" maxlength="320" required placeholder="pessoa@exemplo.com"></label>'+
+      '<label class="field">Observação (opcional)<textarea name="notes" maxlength="280" rows="2" placeholder="Ex.: testes pelo celular"></textarea></label>'+
+      '<button class="button secondary" type="submit">Marcar como tester</button></form></details>'+
+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Status de tester não é permissão de acesso.</strong>'+
     '<p>Ativar ou desativar a classificação não bloqueia login nem modifica vitrines. Apenas o administrador pode alterar esses registros.</p></div></div>'+
     '</section>'+testerDetailPanel();
