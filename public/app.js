@@ -2,7 +2,7 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -409,6 +409,63 @@ function adminTestersPage() {
     '<p>Ativar ou desativar a classificação não bloqueia login nem modifica vitrines. Apenas o administrador pode alterar esses registros.</p></div></div>'+
     '</section>'+testerDetailPanel();
 }
+function systemDate(date){
+  if(!date)return '—';
+  const d=new Date(date);
+  return Number.isNaN(d.getTime())?'—':d.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'});
+}
+function systemPage(){
+  if(!state.user?.isAdmin)return '<div class="empty">Acesso restrito ao administrador.</div>';
+  const report=state.systemReport;
+  const services=[
+    {id:'app',number:'01',name:'Servidor Vitrine',tag:'Hospedagem / Render',description:'Confirma que a aplicação atual responde às requisições.',icon:'⌘'},
+    {id:'database',number:'02',name:'Banco de dados',tag:'Supabase / API',description:'Verifica consultas de leitura aos dados operacionais.',icon:'▤'},
+    {id:'auth',number:'03',name:'Autenticação',tag:'Supabase / Auth',description:'Consulta o serviço de contas com segurança.',icon:'◇'},
+    {id:'storage',number:'04',name:'Armazenamento',tag:'Supabase / Storage',description:'Confere o bucket de imagens da vitrine.',icon:'▧'}
+  ];
+  const failed=report?services.filter(s=>!report.services?.[s.id]?.healthy).length:0;
+  const headline=report?(failed===0?'Serviços respondendo normalmente.':failed+' serviço(s) precisam de atenção.'):'Sua operação em um só lugar.';
+  const summary=report?(failed===0?'Todos os quatro serviços responderam a esta verificação.':'Consulte as informações abaixo para identificar o que não respondeu.'):'Verifique os serviços essenciais do Vitrine sem precisar abrir vários painéis.';
+  const cards=report?'<div class="ops-system-services">'+services.map(s=>{
+    const live=!!report.services[s.id]?.healthy;
+    return '<article class="ops-system-service"><div class="ops-system-service-head"><span class="ops-system-icon" aria-hidden="true">'+s.icon+'</span>'+
+       '<span class="ops-system-state '+(live?'ok':'issue')+'"><i></i>'+(live?'Respondendo':'Não confirmado')+'</span></div>'+
+       '<div class="ops-system-service-meta">'+s.number+' / '+s.tag+'</div>'+
+       '<h3>'+s.name+'</h3><p>'+s.description+'</p>'+
+       '<div class="ops-system-service-check">'+esc(report.services[s.id]?.detail||'Estado indisponível.')+'</div></article>';
+  }).join('')+'</div>':'';
+  const data=report?.recent;
+  const activity=report?[
+    {label:'Último negócio criado',value:data.dataAvailable?(data.business?.name||'Nenhum negócio cadastrado'):'Não disponível',when:data.business?.createdAt,icon:'▦'},
+    {label:'Último convite gerado',value:data.dataAvailable?(data.invite?.email||'Nenhum convite cadastrado'):'Não disponível',when:data.invite?.createdAt,icon:'✉'},
+    {label:'Último acesso desta conta',value:data.adminLoginAt?'Login identificado pelo Supabase':'Informação indisponível',when:data.adminLoginAt,icon:'◷'}
+  ].map(a=>'<div class="ops-system-activity-row"><span class="ops-system-activity-icon" aria-hidden="true">'+a.icon+'</span>'+
+      '<div class="ops-system-activity-copy"><strong>'+a.label+'</strong><span>'+esc(a.value)+'</span></div>'+
+      '<span class="ops-system-activity-time">'+(a.when?systemDate(a.when):'—')+'</span></div>').join(''):'';
+  const body=state.systemLoading&&!report?'<div class="ops-empty">Verificando os serviços…</div>':
+    !report?'<div class="ops-error"><strong>Diagnóstico indisponível</strong><p>'+esc(state.systemError||'Não foi possível consultar a infraestrutura.')+
+      '</p><button class="button secondary" type="button" data-action="refresh-system">Tentar novamente</button></div>':
+    '<div class="ops-system-grid-head"><div><h2>Serviços essenciais</h2><p>Resultados obtidos somente nesta consulta.</p></div>'+
+      '<span class="ops-system-timestamp">VERIFICADO EM '+systemDate(report.checkedAt)+'</span></div>'+cards+
+      '<div class="ops-system-lower"><section class="ops-system-activity"><div class="ops-system-panel-title"><h2>Últimas atividades</h2><p>Registros administrativos, sem métricas de visitantes.</p></div>'+
+       activity+'</section>'+
+       '<aside class="ops-system-links"><div class="ops-system-panel-title"><h2>Acessos rápidos</h2><p>Abra os painéis oficiais quando precisar.</p></div>'+
+        '<a href="https://dashboard.render.com/web/srv-dbfckpm7bikc73d0sgf0" target="_blank" rel="noopener noreferrer">Render <span>↗</span></a>'+
+        '<a href="https://supabase.com/dashboard/project/uxoxxkufmqtkgyvpynyy" target="_blank" rel="noopener noreferrer">Supabase <span>↗</span></a>'+
+        '<a href="https://github.com/NicolasBenNic/vitrine-beta-0" target="_blank" rel="noopener noreferrer">GitHub <span>↗</span></a></aside></div>';
+  return '<section class="ops-page ops-system-page">'+
+    '<div class="ops-topline"><span class="ops-overline"><span class="ops-online-dot"></span> VITRINE / ADMINISTRAÇÃO</span><span class="pill purple">Área do fundador</span></div>'+
+    '<div class="ops-heading"><div><p class="kicker">Saúde do sistema</p><h1>O Vitrine,<br><em>por dentro.</em></h1>'+
+    '<p class="lead">Tudo o que você precisa saber sobre a operação técnica do beta, sem precisar entender logs ou servidores.</p></div>'+
+    '<button class="button secondary ops-refresh" type="button" data-action="refresh-system" '+(state.systemLoading?'disabled':'')+'>↻ Verificar agora</button></div>'+
+    '<div class="ops-system-hero"><div class="ops-system-hero-left"><span class="ops-system-hero-caption">SITUAÇÃO DA OPERAÇÃO · AGORA</span>'+
+      '<h2>'+headline+'</h2><p>'+summary+'</p></div>'+
+      '<div class="ops-system-hero-icon '+(report&&failed>0?'attention':'')+'" aria-hidden="true">'+(report&&failed>0?'!':'✓')+'</div></div>'+
+    body+
+    '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Verificação pontual, não monitoramento 24 horas.</strong>'+
+    '<p>O status do servidor confirma apenas que esta instância respondeu. Não representa o status global do Render. O painel não rastreia visitas nem gera analytics.</p></div></div>'+
+    '</section>';
+}
 function itemModal() {
   if (!state.modal) return '';
   const item=state.modal.id ? state.items.find(i=>i.id===state.modal.id) : null;
@@ -428,8 +485,8 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['invites','✉','Convites beta'],['admin-testers','◇','Testers']); }
-  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage}[state.tab] || homepage;
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['invites','✉','Convites beta'],['admin-testers','◇','Testers'],['admin-system','⌘','Sistema']); }
+  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage,'admin-system':systemPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
     navigation.map(([tab,icon,label])=>'<button type="button" data-action="tab" data-tab="'+tab+'" class="'+(state.tab===tab?'active':'')+'"><span>'+icon+'</span> '+label+'</button>').join('') +
@@ -470,6 +527,21 @@ async function loadAdminBusinesses() {
     state.adminBusinessesError=error.message || 'Falha na consulta.';
   } finally {
     state.adminBusinessesLoading=false;
+    renderApp();
+  }
+}
+async function loadAdminSystem(){
+  if(!state.user?.isAdmin)return;
+  state.systemLoading=true;
+  state.systemError='';
+  renderApp();
+  try{
+    state.systemReport=await request('/api/admin/system');
+  }catch(error){
+    state.systemReport=null;
+    state.systemError=error.message||'Não foi possível verificar a infraestrutura.';
+  }finally{
+    state.systemLoading=false;
     renderApp();
   }
 }
@@ -616,11 +688,12 @@ async function onClick(event) {
       }
       return;
     }
-    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();if(state.tab==='admin-testers')await loadAdminTesters();renderApp();}
+    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();if(state.tab==='admin-testers')await loadAdminTesters();if(state.tab==='admin-system')await loadAdminSystem();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
     else if(action==='refresh-invites') {await loadInvites();}
     else if(action==='refresh-testers') {await loadAdminTesters();}
+    else if(action==='refresh-system') {await loadAdminSystem();}
     else if(action==='tester-filter') {state.testerStatus=button.dataset.filter;renderApp();}
     else if(action==='tester-details') {state.testerDetailId=button.dataset.id;renderApp();}
     else if(action==='close-tester-details') {state.testerDetailId=null;renderApp();}
