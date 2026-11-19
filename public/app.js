@@ -2,7 +2,7 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -320,6 +320,95 @@ function invitesPage() {
     '</section>';
 }
 
+function testerDate(value) {
+  if(!value)return '—';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
+}
+function filteredTesters() {
+  const list=state.testers?.testers || [];
+  const query=String(state.testerQuery||'').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  return list.filter(t=>(state.testerStatus==='todos'||
+      (state.testerStatus==='ativos'&&t.enabled)||
+      (state.testerStatus==='inativos'&&!t.enabled)) &&
+      (!query||[t.email,t.businessName,t.notes].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().includes(query)));
+}
+function testerRow(t) {
+  const status=t.enabled?'Ativo':'Inativo';
+  return '<div class="ops-tester-row">'+
+   '<div class="ops-tester-member"><div class="ops-tester-avatar">'+esc(String(t.email||'?').slice(0,1).toUpperCase())+'</div>'+
+     '<div class="ops-tester-person"><strong>'+esc(t.email)+'</strong><span>'+esc(t.businessName||'Negócio ainda não configurado')+'</span></div></div>'+
+   '<div class="ops-tester-note">'+esc(t.notes||'Sem observações')+'</div>'+
+   '<div><span class="ops-tester-status '+(t.enabled?'active':'inactive')+'"><i></i>'+status+'</span></div>'+
+   '<div class="ops-tester-date">'+testerDate(t.createdAt)+'</div>'+
+   '<div class="ops-tester-actions"><button type="button" data-action="tester-details" data-id="'+esc(t.userId)+'" class="ops-tester-detail-btn">Gerenciar <span>↗</span></button></div>'+
+  '</div>';
+}
+function updateTesterRows(){
+  const list=document.getElementById('ops-tester-rows');
+  const count=document.getElementById('ops-tester-results');
+  if(list)list.innerHTML=filteredTesters().length?filteredTesters().map(testerRow).join(''):'<div class="ops-tester-empty">Nenhum tester corresponde aos filtros.</div>';
+  if(count)count.textContent=filteredTesters().length+' participante(s) exibido(s)';
+}
+function testerDetailPanel() {
+  if(!state.testerDetailId)return '';
+  const t=(state.testers?.testers||[]).find(t=>t.userId===state.testerDetailId);
+  if(!t)return '';
+  return '<div class="modal-backdrop"><div class="modal ops-tester-modal" role="dialog" aria-modal="true" aria-labelledby="ops-tester-modal-title">'+
+   '<div class="ops-tester-modal-head"><div><p class="kicker">Detalhes do tester</p><h2 id="ops-tester-modal-title">Gerenciar participante</h2></div>'+
+   '<button class="close" data-action="close-tester-details" type="button" aria-label="Fechar">×</button></div>'+
+   '<div class="ops-tester-person-meta"><span class="ops-tester-avatar">'+esc(t.email[0].toUpperCase())+'</span>'+
+    '<div><strong>'+esc(t.email)+'</strong><small>'+esc(t.businessName||'Sem negócio configurado')+'</small></div></div>'+
+   '<div class="ops-tester-detail-meta"><span class="ops-tester-status '+(t.enabled?'active':'inactive')+'"><i></i>'+(t.enabled?'Ativo':'Inativo')+'</span>'+
+     '<span class="ops-tester-detail-date">Adicionado em '+testerDate(t.createdAt)+'</span></div>'+
+   '<form id="tester-notes-form"><input type="hidden" name="userId" value="'+esc(t.userId)+'">'+
+     '<label class="field">Observações internas<textarea name="notes" maxlength="280" rows="3" placeholder="Ex.: testes de fotos e vídeos">'+esc(t.notes||'')+'</textarea></label>'+
+     '<div class="ops-tester-modal-actions"><button type="submit" class="button secondary">Salvar observação</button>'+
+       '<button type="button" class="button '+(t.enabled?'danger':'lime')+'" data-action="toggle-tester" data-id="'+esc(t.userId)+'">'+(t.enabled?'Desativar tester':'Ativar tester')+'</button></div>'+
+   '</form><p class="ops-tester-safety-note">Desativar o status de tester não bloqueia a conta nem altera sua vitrine. O usuário mantém o login e os dados.</p>'+
+  '</div></div>';
+}
+function adminTestersPage() {
+  if(!state.user?.isAdmin)return '<div class="empty">Acesso restrito ao administrador.</div>';
+  const data=state.testers;
+  const loading=state.testersLoading;
+  const list=data?.testers||[];
+  const active=list.filter(t=>t.enabled).length;
+  const inactive=list.length-active;
+  const counters=[['Participantes',list.length,'01'],['Testers ativos',active,'02'],['Testers inativos',inactive,'03']];
+  const countersHTML='<div class="ops-tester-metrics">'+counters.map((c,i)=>
+    '<article class="ops-tester-metric '+(!i?'highlight':'')+'"><div class="ops-tester-metric-head"><span>'+c[0]+'</span><small>'+c[2]+'</small></div>'+
+    '<strong>'+(data?c[1].toLocaleString('pt-BR'):'—')+'</strong><p>'+(!i?'Cadastrados para testes':i===1?'Participação habilitada':'Participação desabilitada')+'</p></article>').join('')+'</div>';
+  const listHTML=loading&&!data?'<div class="ops-empty">Carregando testers…</div>':
+    !data?'<div class="ops-error"><strong>Testers indisponíveis</strong><p>'+esc(state.testersError||'Não foi possível consultar os registros.')+
+      '</p><button class="button secondary" data-action="refresh-testers" type="button">Tentar novamente</button></div>':
+    '<div class="ops-tester-toolbar"><div class="ops-tester-search"><span aria-hidden="true">⌕</span><input id="ops-tester-search" type="search" autocomplete="off" placeholder="Buscar email ou negócio" aria-label="Buscar testers" value="'+esc(state.testerQuery)+'"></div>'+
+      '<div class="ops-tester-filter" role="group" aria-label="Filtrar testers">'+
+       [['todos','Todos'],['ativos','Ativos'],['inativos','Inativos']].map(i=>'<button type="button" data-action="tester-filter" data-filter="'+i[0]+'" class="'+(state.testerStatus===i[0]?'selected':'')+'">'+i[1]+'</button>').join('')+
+      '</div></div>'+
+    '<div class="ops-tester-table"><div class="ops-tester-table-header"><span>PARTICIPANTE / NEGÓCIO</span><span>OBSERVAÇÕES</span><span>STATUS</span><span>CADASTRO</span><span></span></div>'+
+    '<div id="ops-tester-rows">'+(filteredTesters().length?filteredTesters().map(testerRow).join(''):'<div class="ops-tester-empty">Nenhum tester corresponde aos filtros.</div>')+'</div></div>'+
+    '<div class="ops-tester-bottom"><span id="ops-tester-results">'+filteredTesters().length+' participante(s) exibido(s)</span><span>'+(data.hasMore?'Mostrando os 100 mais recentes':'Atualize para consultar novamente')+'</span></div>';
+  return '<section class="ops-page ops-testers-page">'+
+    '<div class="ops-topline"><span class="ops-overline"><span class="ops-online-dot"></span> VITRINE / ADMINISTRAÇÃO</span><span class="pill purple">Área do fundador</span></div>'+
+    '<div class="ops-heading"><div><p class="kicker">Gestão de testers</p><h1>Pessoas que<br><em>fazem evoluir.</em></h1>'+
+    '<p class="lead">Organize quem participa dos testes do Vitrine, acompanhe o status e registre pequenas observações.</p></div>'+
+    '<button class="button secondary ops-refresh" type="button" data-action="refresh-testers" '+(loading?'disabled':'')+'>↻ Atualizar lista</button></div>'+
+    countersHTML+
+    '<div class="ops-testers-layout"><section class="ops-testers-panel"><div class="ops-testers-panel-head"><div><h2>Participantes do beta</h2>'+
+    '<p>Contas existentes que você marcou como testers.</p></div><span class="ops-tester-count">'+(data?list.length:'—')+' REGISTROS</span></div>'+
+    listHTML+'</section>'+
+    '<aside class="ops-testers-create"><div class="ops-testers-create-top"><div class="ops-tester-add-icon">✦</div><span class="pill green">Beta fechado</span></div>'+
+    '<h2>Adicionar<br>um tester.</h2><p>Inclua alguém que já tenha criado uma conta no Vitrine. Não é necessário gerar outra senha.</p>'+
+    '<form id="tester-create-form"><label class="field">Email da conta<input name="email" type="email" placeholder="pessoa@exemplo.com" maxlength="320" autocomplete="email" required></label>'+
+    '<label class="field">Observação (opcional)<textarea name="notes" maxlength="280" rows="3" placeholder="Ex.: validar fluxo pelo celular"></textarea></label>'+
+    '<button class="button primary ops-tester-create-btn" type="submit">Adicionar tester <span>↗</span></button></form>'+
+    '<p class="ops-tester-create-note">A pessoa ainda não tem conta? Gere primeiro um convite na área de Convites Beta.</p>'+
+    '</aside></div>'+
+    '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Status de tester não é permissão de acesso.</strong>'+
+    '<p>Ativar ou desativar a classificação não bloqueia login nem modifica vitrines. Apenas o administrador pode alterar esses registros.</p></div></div>'+
+    '</section>'+testerDetailPanel();
+}
 function itemModal() {
   if (!state.modal) return '';
   const item=state.modal.id ? state.items.find(i=>i.id===state.modal.id) : null;
@@ -339,8 +428,8 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios']); navigation.push(['invites','✉','Convites beta']); }
-  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage}[state.tab] || homepage;
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios']); navigation.push(['invites','✉','Convites beta'],['admin-testers','◇','Testers']); }
+  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
     navigation.map(([tab,icon,label])=>'<button type="button" data-action="tab" data-tab="'+tab+'" class="'+(state.tab===tab?'active':'')+'"><span>'+icon+'</span> '+label+'</button>').join('') +
@@ -381,6 +470,22 @@ async function loadAdminBusinesses() {
     state.adminBusinessesError=error.message || 'Falha na consulta.';
   } finally {
     state.adminBusinessesLoading=false;
+    renderApp();
+  }
+}
+async function loadAdminTesters(){
+  if(!state.user?.isAdmin)return;
+  state.testersLoading=true;
+  state.testersError='';
+  renderApp();
+  try{
+    state.testers=await request('/api/admin/testers');
+    state.testersLoaded=true;
+  }catch(error){
+    state.testersError=error.message||'Erro na consulta.';
+    if(!state.testersLoaded)state.testers=null;
+  }finally{
+    state.testersLoading=false;
     renderApp();
   }
 }
@@ -477,6 +582,14 @@ async function onForm(event) {
       await reload();toast('Serviço salvo.');
     } else if(form.id==='command-form') {
       await runCommand(String(fd.get('command')));
+    } else if(form.id==='tester-create-form') {
+      await request('/api/admin/testers',{method:'POST',...jsonBody({email:fd.get('email'),notes:fd.get('notes')})});
+      state.adminSummary=null;state.testerQuery='';state.testerStatus='todos';
+      await loadAdminTesters();toast('Tester cadastrado.');
+    } else if(form.id==='tester-notes-form') {
+      const userId=String(fd.get('userId'));
+      await request('/api/admin/testers/'+encodeURIComponent(userId),{method:'PATCH',...jsonBody({notes:fd.get('notes')})});
+      state.testerDetailId=null;await loadAdminTesters();toast('Observação salva.');
     } else if(form.id==='invite-form') {
       const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email')})});
       state.inviteLink=location.origin+data.path;
@@ -503,10 +616,26 @@ async function onClick(event) {
       }
       return;
     }
-    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();renderApp();}
+    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();if(state.tab==='admin-testers')await loadAdminTesters();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
     else if(action==='refresh-invites') {await loadInvites();}
+    else if(action==='refresh-testers') {await loadAdminTesters();}
+    else if(action==='tester-filter') {state.testerStatus=button.dataset.filter;renderApp();}
+    else if(action==='tester-details') {state.testerDetailId=button.dataset.id;renderApp();}
+    else if(action==='close-tester-details') {state.testerDetailId=null;renderApp();}
+    else if(action==='toggle-tester') {
+      const t=state.testers?.testers.find(x=>x.userId===button.dataset.id);
+      if(!t)return;
+      const enabled=!t.enabled;
+      if(!enabled&&!confirm('Desativar '+t.email+' como tester? Isso NÃO bloqueia a conta nem impede login.'))return;
+      state.busy=true;
+      try {
+        await request('/api/admin/testers/'+encodeURIComponent(t.userId),{method:'PATCH',...jsonBody({enabled,confirm:!enabled})});
+        state.testerDetailId=null;state.adminSummary=null;await loadAdminTesters();
+        toast(enabled?'Tester ativado.':'Status de tester desativado.');
+      } finally {state.busy=false;}
+    }
     else if(action==='invite-filter') {state.inviteFilter=button.dataset.filter;renderApp();}
     else if(action==='repeat-invite') {const field=document.getElementById('ops-invite-email');if(field){field.value=button.dataset.email;field.scrollIntoView({behavior:'smooth',block:'center'});field.focus();toast('E-mail preenchido. Confirme em Gerar convite.');}}
     else if(action==='cancel-invite') {
@@ -572,6 +701,10 @@ async function onChange(event) {
 }
 
 root.addEventListener('input',event=>{
+  if(event.target.id==='ops-tester-search'){
+    state.testerQuery=event.target.value;
+    updateTesterRows();
+  }
   if(event.target.id==='ops-invite-search'){
     state.inviteQuery=event.target.value;
     updateInviteRows();
@@ -588,6 +721,9 @@ root.addEventListener('change',event=>{
   }
 });
 root.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&state.testerDetailId){
+    state.testerDetailId=null;renderApp();
+  }
   if(event.key==='Escape'&&state.businessDetailId){
     state.businessDetailId=null;renderApp();
   }
