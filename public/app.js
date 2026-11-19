@@ -2,7 +2,7 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -112,6 +112,37 @@ function publishPage() {
     (published?'<a class="button lime" target="_blank" rel="noopener noreferrer" href="' + esc(link()) + '">Abrir vitrine ↗</a>':'') +
     '</div></section></div>';
 }
+function adminSummaryPage() {
+  if (!state.user?.isAdmin) return '<div class="empty">Acesso restrito ao administrador.</div>';
+  const s=state.adminSummary;
+  const cards=[
+    {label:'Negócios cadastrados', key:'businesses', detail:'Total de empresas criadas', number:'01', kind:'hero'},
+    {label:'Vitrines publicadas', key:'published', detail:'Disponíveis para os clientes', number:'02'},
+    {label:'Vitrines em rascunho', key:'drafts', detail:'Ainda não publicadas', number:'03'},
+    {label:'Convites pendentes', key:'pendingInvites', detail:'Válidos e ainda não usados', number:'04'},
+    {label:'Testers ativos', key:'activeTesters', detail:'Participantes dos testes internos', number:'05'}
+  ];
+  const date=s?.asOf ? new Date(s.asOf).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}) : '—';
+  const metrics=state.adminSummaryLoading && !s
+    ? '<div class="ops-empty">Carregando totais da operação…</div>'
+    : !s
+      ? '<div class="ops-error"><strong>Resumo indisponível</strong><p>'+esc(state.adminSummaryError || 'Não foi possível carregar os dados.')+'</p><button class="button secondary" data-action="refresh-summary">Tentar novamente</button></div>'
+      : '<div class="ops-metric-grid">'+cards.map(c=>
+          '<article class="ops-metric '+(c.kind==='hero'?'ops-metric-featured':'')+'">'+
+            '<div class="ops-metric-top"><span class="ops-metric-label">'+esc(c.label)+'</span><span class="ops-metric-index">'+c.number+'</span></div>'+
+            '<strong class="ops-metric-value">'+Number(s.counts[c.key] || 0).toLocaleString('pt-BR')+'</strong>'+
+            '<div class="ops-metric-bottom"><span>'+esc(c.detail)+'</span><span class="ops-metric-dot" aria-hidden="true"></span></div>'+
+          '</article>').join('')+'</div>';
+  return '<section class="ops-page">'+
+    '<div class="ops-topline"><span class="ops-overline"><span class="ops-online-dot"></span> VITRINE / ADMINISTRAÇÃO</span><span class="pill purple">Área do fundador</span></div>'+
+    '<div class="ops-heading"><div><p class="kicker">Resumo operacional</p><h1>Sua operação,<br><em>sob controle.</em></h1>'+
+    '<p class="lead">Uma visão simples dos negócios, publicações e acessos ao beta. Sem gráficos ou métricas de visitantes.</p></div>'+
+    '<button class="button secondary ops-refresh" data-action="refresh-summary" '+(state.adminSummaryLoading?'disabled':'')+'><span aria-hidden="true">↻</span> Atualizar dados</button></div>'+
+    '<div class="ops-section-head"><h2>Panorama do beta</h2><span class="ops-asof">'+(s?'ATUALIZADO EM '+esc(date):state.adminSummaryLoading?'CARREGANDO':'SEM DADOS')+'</span></div>'+
+    metrics+
+    '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Controle operacional, não analytics.</strong><p>Estes números representam registros do sistema. Não medimos visualizações, cliques ou comportamento dos visitantes.</p></div></div>'+
+    '</section>';
+}
 function invitesPage() {
   if (!state.user.isAdmin) return '<div class="empty">Acesso restrito.</div>';
   return '<div class="section-panel"><div class="heading"><div><p class="kicker">beta privado</p><h1>Convide seus<br><em>primeiros clientes.</em></h1><p class="lead">Você controla quem pode criar uma vitrine. Quem visita as vitrines publicadas não precisa de convite.</p></div></div>' +
@@ -144,10 +175,10 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) navigation.push(['invites','✉','Convites beta']);
-  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage}[state.tab] || homepage;
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM']); navigation.push(['invites','✉','Convites beta']); }
+  const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
-    '<div><p class="kicker" style="margin:0 12px 15px">painel de criação</p><nav class="nav">' +
+    '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
     navigation.map(([tab,icon,label])=>'<button type="button" data-action="tab" data-tab="'+tab+'" class="'+(state.tab===tab?'active':'')+'"><span>'+icon+'</span> '+label+'</button>').join('') +
     '</nav></div><div class="sidebar-bottom"><div class="side-user">'+esc(state.user.email)+'</div><button class="plain-btn" type="button" data-action="logout">Sair da conta ↗</button></div></aside>' +
     '<main class="main"><div class="content"><div class="topbar"><span class="kicker">Vitrine Beta · exclusivo</span><div class="topbar-right">'+(state.user.isTester?'<span class="pill purple">Tester · acesso ativo</span>':'')+'<span class="pill '+(state.business.is_published?'green':'')+'">'+(state.business.is_published?'Publicado':'Rascunho')+'</span></div></div>' +
@@ -158,6 +189,21 @@ async function reload() {
   state.user=data.user;state.business=data.business;state.items=data.items||[];
   state.previewIndex=Math.min(state.previewIndex,Math.max(0,state.items.length-1));
   renderApp();
+}
+async function loadAdminSummary() {
+  if (!state.user?.isAdmin) return;
+  state.adminSummaryLoading=true;
+  state.adminSummaryError='';
+  renderApp();
+  try {
+    state.adminSummary=await request('/api/admin/summary');
+  } catch (error) {
+    state.adminSummary=null;
+    state.adminSummaryError=error.message || 'Erro ao consultar o servidor.';
+  } finally {
+    state.adminSummaryLoading=false;
+    renderApp();
+  }
 }
 async function loadInvites() {
   if (!state.user?.isAdmin) return;
@@ -263,7 +309,8 @@ async function onClick(event) {
       }
       return;
     }
-    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();renderApp();}
+    if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();renderApp();}
+    else if(action==='refresh-summary') {await loadAdminSummary();}
     else if(action==='logout'){await request('/api/auth/logout',{method:'POST'});state.user=null;state.business=null;renderAuth();}
     else if(action==='add-item'||action==='quick-add'){state.modal={};state.editDraft=null;state.editImagePath='';state.editImageURL='';renderApp();}
     else if(action==='edit-item'){const item=state.items.find(i=>i.id===button.dataset.id);if(item){state.modal={id:item.id};state.editDraft=null;state.editImagePath=item.image_path||'';state.editImageURL=item.image_url||'';renderApp();}}
