@@ -418,8 +418,8 @@ async function api(req, res, pathname) {
   }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
-    const invites = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '100' });
-    return json(res, 200, { invites });
+    const rows = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '101' });
+    return json(res, 200, { invites: rows.slice(0,100), hasMore: rows.length > 100, asOf: new Date().toISOString() });
   }
   if (pathname === '/api/admin/invites' && req.method === 'POST') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
@@ -431,6 +431,22 @@ async function api(req, res, pathname) {
     const expires_at = new Date(Date.now() + 14 * 86400000).toISOString();
     await insert('beta_invites', { email, token_hash, expires_at });
     return json(res, 201, { token, email, expires_at, path: '/?invite=' + encodeURIComponent(token) });
+  }
+  const cancelInvite = /^\/api\/admin\/invites\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/cancel$/.exec(pathname);
+  if (cancelInvite && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    if (body.confirm !== true) fail(409, 'Confirme o cancelamento do convite.');
+    const now = new Date().toISOString();
+    // Use a fixed expiration sentinel so the cancelled state is visible without
+    // changing the existing database schema. Registration already checks expiry.
+    const revoked = await patch('beta_invites', {
+      id: 'eq.' + cancelInvite[1],
+      used_at: 'is.null',
+      expires_at: 'gt.' + now
+    }, { expires_at: '2000-01-01T00:00:00.000Z' });
+    if (!revoked.length) fail(409, 'Convite não está mais pendente. Atualize a lista.');
+    return json(res, 200, { success: true });
   }
   fail(404, 'Rota não encontrada.');
 }
