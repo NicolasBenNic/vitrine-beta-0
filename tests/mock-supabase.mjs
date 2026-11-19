@@ -16,9 +16,26 @@ const state = {
     invite_role: 'business', token_hash:'test-original-hash', created_at: now,
     expires_at: new Date(Date.now() + 86400000).toISOString(), used_at:null }]
 };
+
+if (process.env.TEST_MULTI_TENANT === '1') {
+  const memberBusiness='66666666-6666-4666-8666-666666666666';
+  const otherBusiness='77777777-7777-4777-8777-777777777777';
+  state.businesses.push(
+    {id:memberBusiness,owner_id:memberId,name:'Empresa Tester',slug:'empresa-tester',
+      description:'Somente tester',whatsapp:'',is_published:false,created_at:now,updated_at:now},
+    {id:otherBusiness,owner_id:'88888888-8888-4888-8888-888888888888',name:'Empresa de Outra Pessoa',
+      slug:'empresa-outra',description:'Somente outro proprietário',whatsapp:'',is_published:false,created_at:now,updated_at:now}
+  );
+  state.catalog_items.push(
+    {id:'99999999-9999-4999-8999-999999999999',business_id:memberBusiness,name:'Serviço do tester',category:'Geral',description:'Meu item',price_cents:2000,position:1,is_active:true,created_at:now},
+    {id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',business_id:otherBusiness,name:'Serviço de outro',category:'Geral',description:'Privado de outro',price_cents:3000,position:1,is_active:true,created_at:now}
+  );
+  state.beta_testers.push({user_id:memberId,email:'member@example.test',enabled:true,notes:'Piloto',created_at:now});
+}
 const authUsers = [
   { id: ownerId, email: 'admin@example.test', password:'owner-password-123', app_metadata:{provider:'email'}, created_at:now,last_sign_in_at:now },
-  { id: memberId, email: 'member@example.test', password:'member-password-123', app_metadata:{provider:'email'}, created_at:now,last_sign_in_at:now }
+  { id: memberId, email: 'member@example.test', password:'member-password-123', app_metadata:{provider:'email'}, created_at:now,last_sign_in_at:now },
+  { id:'88888888-8888-4888-8888-888888888888', email:'other@example.test', password:'other-password-123', app_metadata:{provider:'email'}, created_at:now,last_sign_in_at:now }
 ];
 function reply(status, payload, headers={}) {
   return new Response(JSON.stringify(payload), { status, headers: {'content-type':'application/json',...headers} });
@@ -38,7 +55,8 @@ globalThis.fetch = async (url, opts = {}) => {
     const token = bearer.replace('Bearer ','');
     const email = token === 'admin-access' ? 'admin@example.test' :
       token === 'member-access' ? 'member@example.test' :
-      token === 'partner-access' ? 'socio@example.test' : '';
+      token === 'partner-access' ? 'socio@example.test' :
+      token === 'other-access' ? 'other@example.test' : '';
     const account = authUsers.find(x => x.email === email);
     return account ? reply(200, resultUser(account)) : reply(401, {message:'Invalid JWT'});
   }
@@ -46,7 +64,7 @@ globalThis.fetch = async (url, opts = {}) => {
     const account = authUsers.find(x => x.email === body.email && x.password === body.password);
     if (!account) return reply(400, {error_description:'Invalid login credentials'});
     const token = account.email === 'admin@example.test' ? 'admin-access' :
-      account.email === 'member@example.test' ? 'member-access' : 'partner-access';
+      account.email === 'member@example.test' ? 'member-access' : account.email === 'other@example.test' ? 'other-access' : 'partner-access';
     return reply(200, {user:resultUser(account), access_token:token, refresh_token:'refresh-test',expires_in:3600});
   }
   if (u.pathname === '/auth/v1/admin/users') {
@@ -80,7 +98,8 @@ globalThis.fetch = async (url, opts = {}) => {
   const table = /^\/rest\/v1\/([a-z_]+)$/.exec(u.pathname)?.[1];
   if (table && state[table]) {
     const allowedColumns = table === 'beta_testers' ? ['user_id','email','enabled','notes','created_at'] :
-      table === 'businesses' ? ['id','name','slug','owner_id','description','whatsapp','is_published','created_at','updated_at'] :
+      table === 'businesses' ? ['id','name','slug','owner_id','description','whatsapp','is_published','created_at','updated_at','logo_path'] :
+      table === 'catalog_items' ? ['id','business_id','name','category','description','price_cents','position','image_path','is_active','created_at'] :
       ['id','email','token_hash','invite_role','expires_at','used_at','created_at'];
     const select = (u.searchParams.get('select') || '*').split(',');
     if (select.some(c => c !== '*' && !allowedColumns.includes(c))) return reply(400, {message:'Column unavailable'});
