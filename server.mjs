@@ -95,6 +95,33 @@ async function select(table, params) {
   const result = await call(query(table, params));
   return Array.isArray(result) ? result : [];
 }
+// Exact operational counts for the founder console. This runs only on the server.
+async function countRows(table, filters = {}) {
+  requireConfig();
+  const countColumn = table === 'beta_testers' ? 'user_id' : 'id';
+  const path = query(table, { select: countColumn, ...filters });
+  const response = await fetch(SB + path, {
+    method: 'GET',
+    headers: {
+      apikey: SECRET,
+      Authorization: 'Bearer ' + SECRET,
+      Prefer: 'count=exact',
+      Range: '0-0'
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) {
+    console.error('Founder summary count failed:', table, response.status);
+    fail(502, 'Não foi possível carregar o resumo da operação.');
+  }
+  const header = response.headers.get('content-range') || '';
+  const match = /\/(\d+)$/.exec(header);
+  if (!match) {
+    console.error('Missing exact count for', table);
+    fail(502, 'Não foi possível conferir os totais da operação.');
+  }
+  return Number(match[1]);
+}
 async function insert(table, value) {
   const result = await call('/rest/v1/' + table, 'POST', value, { prefer: 'return=representation' });
   return result?.[0] || null;
@@ -318,10 +345,194 @@ async function api(req, res, pathname) {
     if (!result.ok) { console.error('Upload error', result.status); fail(502, 'Falha ao enviar imagem.'); }
     return json(res, 201, { path, url: imageUrl(path) });
   }
+  // A point-in-time founder check, not uptime monitoring or the Render control-plane API.
+  // No secrets or exception details are returned to the browser.
+  if (pathname === '/api/admin/system' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [databaseCheck, authCheck, storageCheck] = await Promise.allSettled([
+      (async () => {
+        const [businesses, invites] = await Promise.all([
+          select('businesses', { select: 'name,created_at', order: 'created_at.desc', limit: '1' }),
+          select('beta_invites', { select: 'email,created_at', order: 'created_at.desc', limit: '1' })
+        ]);
+        return {
+          recentBusiness: businesses[0] ? { name: businesses[0].name, createdAt: businesses[0].created_at } : null,
+          recentInvite: invites[0] ? { email: invites[0].email, createdAt: invites[0].created_at } : null
+        };
+      })(),
+      (async () => {
+        const data = await call('/auth/v1/admin/users?page=1&per_page=1');
+        if (!Array.isArray(data?.users)) throw Error('Resposta Auth inesperada');
+        return true;
+      })(),
+      (async () => {
+        const data = await call('/storage/v1/bucket/vitrine-media');
+        if (data?.id !== 'vitrine-media' && data?.name !== 'vitrine-media') throw Error('Bucket não encontrado');
+        return true;
+      })()
+    ]);
+    for (const [name, result] of [
+      ['dados', databaseCheck], ['autenticação', authCheck], ['armazenamento', storageCheck]
+    ]) {
+      if (result.status === 'rejected') console.error('Admin system check failed:', name, String(result.reason?.message || 'Falha na consulta'));
+    }
+    const databaseHealthy = databaseCheck.status === 'fulfilled';
+    return json(res, 200, {
+      checkedAt: new Date().toISOString(),
+      environment: IS_PROD ? 'production' : 'development',
+      uptimeSeconds: Math.floor(process.uptime()),
+      services: {
+        app: { healthy: true, detail: 'Este servidor respondeu à consulta.' },
+        database: { healthy: databaseHealthy, detail: databaseHealthy ? 'Consulta de leitura realizada.' : 'Não foi possível consultar os dados.' },
+        auth: { healthy: authCheck.status === 'fulfilled', detail: authCheck.status === 'fulfilled' ? 'Serviço de autenticação respondeu.' : 'Não foi possível confirmar a autenticação.' },
+        storage: { healthy: storageCheck.status === 'fulfilled', detail: storageCheck.status === 'fulfilled' ? 'Bucket de mídia respondeu.' : 'Não foi possível confirmar o armazenamento.' }
+      },
+      recent: {
+        business: databaseHealthy ? databaseCheck.value.recentBusiness : null,
+        invite: databaseHealthy ? databaseCheck.value.recentInvite : null,
+        adminLoginAt: user.last_sign_in_at || null,
+        dataAvailable: databaseHealthy
+      }
+    });
+  }
+  if (pathname === '/api/admin/summary' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const now = new Date();
+    const [businesses, published, drafts, pendingInvites, activeTesters] = await Promise.all([
+      countRows('businesses'),
+      countRows('businesses', { is_published: 'eq.true' }),
+      countRows('businesses', { is_published: 'eq.false' }),
+      countRows('beta_invites', { used_at: 'is.null', expires_at: 'gt.' + now.toISOString() }),
+      countRows('beta_testers', { enabled: 'eq.true' })
+    ]);
+    return json(res, 200, {
+      counts: { businesses, published, drafts, pendingInvites, activeTesters },
+      asOf: now.toISOString()
+    });
+  }
+  if (pathname === '/api/admin/businesses' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [rows, testers, authResult] = await Promise.all([
+      select('businesses', {
+        select: 'id,owner_id,name,slug,description,whatsapp,is_published,created_at,updated_at',
+        order: 'created_at.desc',
+        limit: '101'
+      }),
+      select('beta_testers', { select: 'user_id,enabled', limit: '1000' }),
+      call('/auth/v1/admin/users?page=1&per_page=200')
+    ]);
+    const accounts = new Map();
+    const firstPage = Array.isArray(authResult?.users) ? authResult.users : [];
+    for (const account of firstPage) {
+      if (account?.id) accounts.set(account.id, account.email || null);
+    }
+    // The beta is limited to 100 businesses in this view. Fetch more Auth pages
+    // only if the current page did not cover all listed owners.
+    const selected = rows.slice(0, 100);
+    const ownerIds = new Set(selected.map(b => b.owner_id));
+    for (let page = 2; page <= 5 && [...ownerIds].some(id => !accounts.has(id)); page++) {
+      if (firstPage.length < 200 && page === 2) break;
+      const nextPage = await call('/auth/v1/admin/users?page=' + page + '&per_page=200');
+      const batch = Array.isArray(nextPage?.users) ? nextPage.users : [];
+      for (const account of batch) if (account?.id) accounts.set(account.id, account.email || null);
+      if (batch.length < 200) break;
+    }
+    const testerIds = new Set(testers.filter(t => t.enabled).map(t => t.user_id));
+    const businesses = selected.map(b => ({
+      id: b.id,
+      name: b.name,
+      slug: b.slug,
+      description: b.description || '',
+      whatsapp: b.whatsapp || '',
+      ownerEmail: accounts.get(b.owner_id) || null,
+      isTester: testerIds.has(b.owner_id),
+      isPublished: !!b.is_published,
+      createdAt: b.created_at,
+      updatedAt: b.updated_at
+    }));
+    return json(res, 200, { businesses, hasMore: rows.length > 100, asOf: new Date().toISOString() });
+  }
+  const adminUnpublish = /^\/api\/admin\/businesses\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/unpublish$/.exec(pathname);
+  if (adminUnpublish && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    if (body.confirm !== true) fail(409, 'Confirme a retirada da vitrine do ar.');
+    const current = await select('businesses', { id: 'eq.' + adminUnpublish[1], select: 'id,name,is_published', limit: '1' });
+    if (!current[0]) fail(404, 'Negócio não encontrado.');
+    if (!current[0].is_published) return json(res, 200, { success: true, alreadyDraft: true });
+    const updated = await patch('businesses', { id: 'eq.' + adminUnpublish[1], is_published: 'eq.true' }, {
+      is_published: false,
+      updated_at: new Date().toISOString()
+    });
+    if (!updated.length) fail(409, 'O estado da vitrine mudou. Atualize a lista.');
+    return json(res, 200, { success: true });
+  }
+  // Testers are a pilot classification, not an authorization or login role.
+  // Management endpoints are restricted to the founder/admin on the server.
+  if (pathname === '/api/admin/testers' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [rows, businesses] = await Promise.all([
+      select('beta_testers', { select: 'user_id,email,enabled,notes,created_at', order: 'created_at.desc', limit: '101' }),
+      select('businesses', { select: 'owner_id,name,slug,is_published', limit: '500' })
+    ]);
+    const businessByOwner = new Map(businesses.map(b => [b.owner_id, b]));
+    const testers = rows.slice(0,100).map(t => {
+      const business = businessByOwner.get(t.user_id);
+      return {
+        userId: t.user_id,
+        email: t.email,
+        enabled: !!t.enabled,
+        notes: t.notes || '',
+        createdAt: t.created_at,
+        businessName: business?.name || null,
+        businessSlug: business?.slug || null,
+        businessPublished: business?.is_published || false
+      };
+    });
+    return json(res, 200, { testers, hasMore: rows.length > 100, asOf: new Date().toISOString() });
+  }
+  if (pathname === '/api/admin/testers' && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    rateLimit(req, 'tester', 25);
+    const body = await readJSON(req);
+    const email = cleanEmail(body.email);
+    const notes = maxText(body.notes || '', 280);
+    const current = await select('beta_testers', { email: 'eq.' + email, select: 'user_id', limit: '1' });
+    if (current.length) fail(409, 'Este email já está cadastrado como tester.');
+    let account = null;
+    // Supabase Auth Admin list endpoint. This search is bounded for the small beta.
+    // Do not guess an auth.users ID from a client-supplied email.
+    for (let page = 1; page <= 10; page++) {
+      const result = await call('/auth/v1/admin/users?page=' + page + '&per_page=200');
+      const users = Array.isArray(result?.users) ? result.users : [];
+      account = users.find(u => String(u?.email || '').toLowerCase() === email) || null;
+      if (account || users.length < 200) break;
+    }
+    if (!account?.id) fail(404, 'Conta não encontrada. Convide a pessoa primeiro.');
+    const inserted = await insert('beta_testers', { user_id: account.id, email, enabled: true, notes });
+    return json(res, 201, { success: true, userId: inserted?.user_id });
+  }
+  const testerMatch = /^\/api\/admin\/testers\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(pathname);
+  if (testerMatch && req.method === 'PATCH') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    const changes = {};
+    if (typeof body.enabled === 'boolean') {
+      if (body.enabled === false && body.confirm !== true) fail(409, 'Confirme a desativação do tester.');
+      changes.enabled = body.enabled;
+    }
+    if (body.notes !== undefined) changes.notes = maxText(body.notes, 280);
+    if (!Object.keys(changes).length) fail(400, 'Nenhuma alteração informada.');
+    const existing = await select('beta_testers', { user_id: 'eq.' + testerMatch[1], select: 'user_id,enabled', limit: '1' });
+    if (!existing[0]) fail(404, 'Tester não encontrado.');
+    const updated = await patch('beta_testers', { user_id: 'eq.' + testerMatch[1] }, changes);
+    if (!updated.length) fail(409, 'Não foi possível atualizar o tester.');
+    return json(res, 200, { success: true, enabled: updated[0].enabled });
+  }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
-    const invites = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '100' });
-    return json(res, 200, { invites });
+    const rows = await select('beta_invites', { select: 'id,email,created_at,expires_at,used_at', order: 'created_at.desc', limit: '101' });
+    return json(res, 200, { invites: rows.slice(0,100), hasMore: rows.length > 100, asOf: new Date().toISOString() });
   }
   if (pathname === '/api/admin/invites' && req.method === 'POST') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
@@ -333,6 +544,22 @@ async function api(req, res, pathname) {
     const expires_at = new Date(Date.now() + 14 * 86400000).toISOString();
     await insert('beta_invites', { email, token_hash, expires_at });
     return json(res, 201, { token, email, expires_at, path: '/?invite=' + encodeURIComponent(token) });
+  }
+  const cancelInvite = /^\/api\/admin\/invites\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/cancel$/.exec(pathname);
+  if (cancelInvite && req.method === 'POST') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const body = await readJSON(req);
+    if (body.confirm !== true) fail(409, 'Confirme o cancelamento do convite.');
+    const now = new Date().toISOString();
+    // Use a fixed expiration sentinel so the cancelled state is visible without
+    // changing the existing database schema. Registration already checks expiry.
+    const revoked = await patch('beta_invites', {
+      id: 'eq.' + cancelInvite[1],
+      used_at: 'is.null',
+      expires_at: 'gt.' + now
+    }, { expires_at: '2000-01-01T00:00:00.000Z' });
+    if (!revoked.length) fail(409, 'Convite não está mais pendente. Atualize a lista.');
+    return json(res, 200, { success: true });
   }
   fail(404, 'Rota não encontrada.');
 }

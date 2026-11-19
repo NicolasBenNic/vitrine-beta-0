@@ -1,0 +1,23 @@
+name: Testar prévia ADM (etapas 1, 2, 3, 4 e 5)
+on:
+  push:
+    branches:
+      - feat/admin-resumo-preview
+      - feat/admin-negocios-preview
+      - feat/admin-convites-preview
+      - feat/admin-testers-preview
+      - feat/admin-sistema-preview
+  workflow_dispatch:
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sintaxe
+        run: npm run check
+      - name: Testes HTTP
+        run: npm test
