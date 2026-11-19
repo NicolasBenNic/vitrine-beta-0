@@ -428,7 +428,7 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios']); navigation.push(['invites','✉','Convites beta'],['admin-testers','◇','Testers']); }
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['invites','✉','Convites beta'],['admin-testers','◇','Testers']); }
   const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
