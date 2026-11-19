@@ -1,8 +1,10 @@
 const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
+const partnerInvite = new URLSearchParams(location.search).get('partner') === '1';
+const testerInvite = new URLSearchParams(location.search).get('tester') === '1';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', inviteLinkRole:'business', adminInvites:[], testerInvites:[], adminInviteLink:'', testerInviteLink:'', adminInviteEmail:'', testerInviteEmail:'', adminInviteError:'', testerInviteError:'', partners:[], partnersError:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -35,18 +37,19 @@ async function copy(value) {
 function logo() { return '<a class="brand" href="/"><span class="brand-icon">V.</span><span class="brand-word">vitrine<span style="color:#7967c2">.</span></span></a>'; }
 function renderAuth() {
   const registering = Boolean(inviteToken);
+  const partnerAccess = registering && partnerInvite;
   root.innerHTML = '<div class="auth-page"><div class="auth-art"><div>' +
     '<span class="pill purple">acesso exclusivo · beta</span><h1 style="margin-top:45px">Sua vitrine.<br><em>Seu negócio.</em><br>Seu jeito.</h1>' +
     '<p class="lead" style="color:#3d3a3f">Produtos, serviços e preços em um link simples para compartilhar com seus clientes.</p></div>' +
     '<p class="small">Vitrine Beta · acesso somente por convite</p></div>' +
     '<div class="auth-box"><form class="auth-form" id="auth-form">' + logo() +
-    '<span class="pill green">' + (registering?'Seu convite chegou':'Área de acesso') + '</span>' +
-    '<h2>' + (registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
-    '<p class="auth-hint">' + (registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
+    '<span class="pill green">' + (partnerAccess?'Convite de administrador':registering&&testerInvite?'Convite para tester':registering?'Seu convite chegou':'Área de acesso') + '</span>' +
+    '<h2>' + (partnerAccess?'Ativar acesso ADM':registering&&testerInvite?'Criar minha vitrine de teste':registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
+    '<p class="auth-hint">' + (partnerAccess?'Use o e-mail do convite e sua senha. Se já tiver conta, use a senha atual. Caso contrário, crie uma senha com pelo menos 10 caracteres.':registering&&testerInvite?'Você terá acesso apenas à criação e edição da sua própria vitrine.':registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
     '<label class="field">Email<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>' +
-    (registering?'<label class="field">Nome do negócio<input name="businessName" maxlength="120" required placeholder="Ex.: Barbearia Central"></label>':'') +
+    (registering&&!partnerAccess?'<label class="field">Nome do negócio<input name="businessName" maxlength="120" required placeholder="Ex.: Barbearia Central"></label>':'') +
     '<label class="field">Senha<input name="password" type="password" autocomplete="' + (registering?'new-password':'current-password') + '" minlength="' + (registering?'10':'1') + '" required placeholder="Sua senha"></label>' +
-    '<button class="button lime" type="submit">' + (registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
+    '<button class="button lime" type="submit">' + (partnerAccess?'Ativar minha Central ADM':registering&&testerInvite?'Entrar como tester':registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
     (registering?'<p class="auth-hint" style="margin-top:20px"><a href="/">Já tenho conta. Entrar</a></p>':'<p class="auth-hint" style="margin-top:20px">Ainda não recebeu convite? Peça um link para o administrador do Vitrine Beta.</p>') +
     '</form></div></div>';
 }
@@ -112,6 +115,46 @@ function publishPage() {
     (published?'<a class="button lime" target="_blank" rel="noopener noreferrer" href="' + esc(link()) + '">Abrir vitrine ↗</a>':'') +
     '</div></section></div>';
 }
+
+function roleInvitePanel(role) {
+  const admin=role==='coadmin';
+  if(admin&&!state.user?.isFounder)return '';
+  const links=admin?state.adminInvites:state.testerInvites;
+  const link=admin?state.adminInviteLink:state.testerInviteLink;
+  const email=admin?state.adminInviteEmail:state.testerInviteEmail;
+  const issue=admin?state.adminInviteError:state.testerInviteError;
+  const formId=admin?'admin-invite-form':'tester-invite-form';
+  const label=admin?'Administrador':'Tester';
+  const rows=(links||[]).slice(0,6);
+  const list=rows.length?
+    rows.map(i=>{
+      const status=inviteStatus(i);
+      const names={pending:'Pendente',used:'Utilizado',expired:'Expirado',cancelled:'Cancelado'};
+      return '<div class="ops-role-invite-row"><div><strong>'+esc(i.email)+'</strong>'+
+        '<small>'+inviteDate(i.created_at)+' · '+names[status]+'</small></div>'+
+        (status==='pending'?'<button type="button" data-action="cancel-role-invite" data-role="'+role+'" data-id="'+esc(i.id)+'">Cancelar</button>':'')+
+        '</div>';
+    }).join(''):
+    '<p class="ops-role-no-invites">Nenhum convite deste tipo registrado.</p>';
+  return '<section class="ops-role-invite '+(admin?'ops-role-admin':'ops-role-tester')+'">'+
+    '<div class="ops-role-invite-heading"><span class="ops-role-invite-icon">'+(admin?'◈':'✦')+'</span>'+
+    '<span class="pill '+(admin?'purple':'green')+'">'+(admin?'Acesso administrativo':'Teste fechado')+'</span></div>'+
+    '<h2>'+(admin?'Convidar para<br>a Central ADM.':'Convidar<br>um tester.')+'</h2>'+
+    '<p>'+(admin?'A pessoa receberá uma conta própria com acesso às cinco áreas de administração. Somente o fundador pode emitir convites ADM.':
+      'O participante poderá criar e administrar somente a própria vitrine, sem acesso aos dados privados de outras empresas.')+'</p>'+
+    '<form id="'+formId+'"><label class="field">E-mail do '+label.toLowerCase()+
+    '<input type="email" name="email" maxlength="320" required autocomplete="email" placeholder="pessoa@exemplo.com"></label>'+
+    '<div class="ops-role-invite-validity">Link único · válido por 14 dias</div>'+
+    '<button class="button primary ops-role-invite-button" type="submit">'+(admin?'Gerar convite ADM':'Gerar convite tester')+' <span aria-hidden="true">↗</span></button></form>'+
+    (link?'<div class="ops-role-invite-result"><strong>Convite de '+label+' criado</strong>'+
+      '<p>Copie e envie para '+esc(email)+'. O link só aparece agora.</p>'+
+      '<code>'+esc(link)+'</code>'+
+      '<button class="button lime" type="button" data-action="'+(admin?'copy-admin-invite':'copy-tester-invite')+'">Copiar link</button></div>':'')+
+    '<div class="ops-role-invite-history"><div class="ops-role-invite-history-head"><h3>Convites '+(admin?'ADM':'de tester')+'</h3>'+
+      '<span>'+links.length+' REGISTROS</span></div>'+
+    (issue?'<p class="ops-role-invite-error">'+esc(issue)+'</p>':'')+
+    list+'</div></section>';
+}
 function adminSummaryPage() {
   if (!state.user?.isAdmin) return '<div class="empty">Acesso restrito ao administrador.</div>';
   const s=state.adminSummary;
@@ -140,6 +183,7 @@ function adminSummaryPage() {
     '<button class="button secondary ops-refresh" data-action="refresh-summary" '+(state.adminSummaryLoading?'disabled':'')+'><span aria-hidden="true">↻</span> Atualizar dados</button></div>'+
     '<div class="ops-section-head"><h2>Panorama do beta</h2><span class="ops-asof">'+(s?'ATUALIZADO EM '+esc(date):state.adminSummaryLoading?'CARREGANDO':'SEM DADOS')+'</span></div>'+
     metrics+
+    (state.user.isFounder?'<div class="ops-role-admin-area">'+roleInvitePanel('coadmin')+partnersPanel()+'</div>':'')+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Controle operacional, não analytics.</strong><p>Estes números representam registros do sistema. Não medimos visualizações, cliques ou comportamento dos visitantes.</p></div></div>'+
     '</section>';
 }
@@ -259,7 +303,7 @@ function inviteRow(i) {
   const labels={pending:'Pendente',used:'Utilizado',expired:'Expirado',cancelled:'Cancelado'};
   return '<div class="ops-invite-row">'+
     '<div class="ops-invite-person"><div class="ops-invite-avatar" aria-hidden="true">'+esc(String(i.email).charAt(0).toUpperCase())+'</div>'+
-    '<div class="ops-invite-email"><strong>'+esc(i.email)+'</strong><span>Enviado manualmente · '+inviteDate(i.created_at)+'</span></div></div>'+
+    '<div class="ops-invite-email"><strong>'+esc(i.email)+'</strong><span>'+(i.invite_role==='coadmin'?'Sócio · acesso ADM':'Empresa · vitrine')+' · '+inviteDate(i.created_at)+'</span></div></div>'+
     '<div class="ops-invite-expiry">'+(status==='used'?'Usado em '+inviteDate(i.used_at):status==='cancelled'?'Acesso invalidado':'Até '+inviteDate(i.expires_at))+'</div>'+
     '<div><span class="ops-invite-status '+status+'"><i></i>'+labels[status]+'</span></div>'+
     '<div class="ops-invite-actions">'+
@@ -273,6 +317,16 @@ function updateInviteRows(){
   if(list)list.innerHTML=filteredInvites().length?filteredInvites().map(inviteRow).join(''):'<div class="ops-invite-empty"><strong>Nenhum convite encontrado</strong><p>Tente outra busca ou escolha um filtro diferente.</p></div>';
   if(count)count.textContent=filteredInvites().length+' registro(s) exibido(s)';
 }
+function partnersPanel(){
+  if(!state.user?.isFounder)return '';
+  return '<section class="ops-partners"><div class="ops-partners-header"><div><p class="kicker">Equipe fundadora</p><h2>Sócios com acesso ADM</h2><p>Contas que podem usar a Central ADM. Apenas o fundador concede ou revoga esse acesso.</p></div>'+
+    '<span class="ops-business-total">'+state.partners.length+' SÓCIO(S)</span></div>'+
+    (state.partnersError?'<p class="ops-partners-error">'+esc(state.partnersError)+'</p>':'')+
+    (!state.partners.length?'<p class="ops-partners-empty">Nenhum sócio com acesso ADM registrado.</p>':
+     state.partners.map(p=>'<div class="ops-partner-row"><div><strong>'+esc(p.email)+'</strong><span>Central ADM · conta individual</span></div>'+
+       '<button class="button danger" type="button" data-action="revoke-partner" data-id="'+esc(p.id)+'">Revogar acesso</button></div>').join(''))+
+    '<p class="ops-partners-note">Revogar retira o acesso administrativo, mas não exclui a conta ou a vitrine pessoal da pessoa.</p></section>';
+}
 function invitesPage() {
   if(!state.user?.isAdmin)return '<div class="empty">Acesso restrito ao administrador.</div>';
   const ready=state.invitesLoaded;
@@ -285,7 +339,7 @@ function invitesPage() {
   ];
   const statuses=[['todos','Todos'],['pending','Pendentes'],['used','Utilizados'],['expired','Expirados'],['cancelled','Cancelados']];
   const feedback=state.inviteLink?
-    '<div class="ops-invite-created"><div class="ops-invite-created-icon">✓</div><div><strong>Convite pronto para enviar</strong><p>Link criado para '+esc(state.inviteLinkEmail)+'. Copie agora e encaminhe por WhatsApp. O link não poderá ser recuperado depois.</p>'+
+    '<div class="ops-invite-created"><div class="ops-invite-created-icon">✓</div><div><strong>Convite pronto para enviar</strong><p>'+(state.inviteLinkRole==='coadmin'?'Convite de sócio com acesso ADM':'Convite de empresa')+' criado para '+esc(state.inviteLinkEmail)+'. Copie agora e encaminhe por WhatsApp. O link não poderá ser recuperado depois.</p>'+
     '<div class="ops-invite-generated-link">'+esc(state.inviteLink)+'</div>'+
     '<button class="button lime" data-action="copy-invite" type="button">Copiar link de convite <span aria-hidden="true">↗</span></button></div></div>' : '';
   const summaryCards=summary.map(s=>'<article class="ops-invite-stat '+(s.key==='pending'?'featured':'')+'"><div class="ops-invite-stat-top"><span>'+s.label+'</span><small>'+s.index+'</small></div>'+
@@ -311,10 +365,11 @@ function invitesPage() {
     '<h2>Um novo negócio<br>começa aqui.</h2>'+
     '<p>Gere um link individual para alguém testar e criar sua própria vitrine.</p>'+
     '<form id="invite-form"><label class="field">E-mail do convidado<input id="ops-invite-email" name="email" type="email" maxlength="320" required placeholder="exemplo@empresa.com" autocomplete="email"></label>'+
+    (state.user.isFounder?'<label class="field ops-invite-role-field">Tipo de acesso<select name="role"><option value="business">Empresa · criar vitrine</option><option value="coadmin">Sócio · Central ADM</option></select></label>':'')+
     '<div class="ops-invite-validity"><span aria-hidden="true">◷</span><div><strong>Validade: 14 dias</strong><small>O link funciona uma única vez</small></div></div>'+
     '<button class="button primary ops-invite-create" type="submit" '+(state.busy?'disabled':'')+'>Gerar convite <span aria-hidden="true">↗</span></button></form>'+
     '<p class="ops-invite-compose-note">O sistema não envia e-mail automaticamente. Você compartilha o link com a pessoa.</p>'+
-    '</aside></div>'+feedback+
+    '</aside></div>'+feedback+partnersPanel()+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Beta controlado, sem cadastro público.</strong>'+
     '<p>Convites usados não podem ser reutilizados. Convites pendentes podem ser cancelados. Links antigos não ficam recuperáveis, por segurança.</p></div></div>'+
     '</section>';
@@ -396,15 +451,15 @@ function adminTestersPage() {
     '<button class="button secondary ops-refresh" type="button" data-action="refresh-testers" '+(loading?'disabled':'')+'>↻ Atualizar lista</button></div>'+
     countersHTML+
     '<div class="ops-testers-layout"><section class="ops-testers-panel"><div class="ops-testers-panel-head"><div><h2>Participantes do beta</h2>'+
-    '<p>Contas existentes que você marcou como testers.</p></div><span class="ops-tester-count">'+(data?list.length:'—')+' REGISTROS</span></div>'+
+    '<p>Pessoas convidadas ou marcadas para os testes do Vitrine.</p></div><span class="ops-tester-count">'+(data?list.length:'—')+' REGISTROS</span></div>'+
     listHTML+'</section>'+
-    '<aside class="ops-testers-create"><div class="ops-testers-create-top"><div class="ops-tester-add-icon">✦</div><span class="pill green">Beta fechado</span></div>'+
-    '<h2>Adicionar<br>um tester.</h2><p>Inclua alguém que já tenha criado uma conta no Vitrine. Não é necessário gerar outra senha.</p>'+
-    '<form id="tester-create-form"><label class="field">Email da conta<input name="email" type="email" placeholder="pessoa@exemplo.com" maxlength="320" autocomplete="email" required></label>'+
-    '<label class="field">Observação (opcional)<textarea name="notes" maxlength="280" rows="3" placeholder="Ex.: validar fluxo pelo celular"></textarea></label>'+
-    '<button class="button primary ops-tester-create-btn" type="submit">Adicionar tester <span>↗</span></button></form>'+
-    '<p class="ops-tester-create-note">A pessoa ainda não tem conta? Gere primeiro um convite na área de Convites Beta.</p>'+
-    '</aside></div>'+
+    roleInvitePanel('tester')+'</div>'+
+    '<details class="ops-existing-tester"><summary>O usuário já tem conta? Marcar como tester</summary>'+
+      '<p>Use esta opção apenas para pessoas que já se cadastraram. Não cria uma conta nem envia convite.</p>'+
+      '<form id="tester-create-form"><label class="field">E-mail da conta existente<input name="email" type="email" maxlength="320" required placeholder="pessoa@exemplo.com"></label>'+
+      '<label class="field">Observação (opcional)<textarea name="notes" maxlength="280" rows="2" placeholder="Ex.: testes pelo celular"></textarea></label>'+
+      '<button class="button secondary" type="submit">Marcar como tester</button></form></details>'+
+
     '<div class="ops-footnote"><span class="ops-footnote-symbol">i</span><div><strong>Status de tester não é permissão de acesso.</strong>'+
     '<p>Ativar ou desativar a classificação não bloqueia login nem modifica vitrines. Apenas o administrador pode alterar esses registros.</p></div></div>'+
     '</section>'+testerDetailPanel();
@@ -485,7 +540,7 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['invites','✉','Convites beta'],['admin-testers','◇','Testers'],['admin-system','⌘','Sistema']); }
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['admin-testers','◇','Testers'],['admin-system','⌘','Sistema']); }
   const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage,'admin-system':systemPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
@@ -507,6 +562,20 @@ async function loadAdminSummary() {
   renderApp();
   try {
     state.adminSummary=await request('/api/admin/summary');
+    if(state.user.isFounder){
+      const [invitations,partners]=await Promise.allSettled([
+        request('/api/admin/invites?role=coadmin'),
+        request('/api/admin/partners')
+      ]);
+      if(invitations.status==='fulfilled'){
+        state.adminInvites=invitations.value.invites||[];
+        state.adminInviteError='';
+      }else state.adminInviteError='Não foi possível consultar convites ADM.';
+      if(partners.status==='fulfilled'){
+        state.partners=partners.value.partners||[];
+        state.partnersError='';
+      }else state.partnersError='Não foi possível consultar os administradores.';
+    }
   } catch (error) {
     state.adminSummary=null;
     state.adminSummaryError=error.message || 'Erro ao consultar o servidor.';
@@ -551,8 +620,17 @@ async function loadAdminTesters(){
   state.testersError='';
   renderApp();
   try{
-    state.testers=await request('/api/admin/testers');
+    const [testers,invites]=await Promise.allSettled([
+      request('/api/admin/testers'),
+      request('/api/admin/invites?role=tester')
+    ]);
+    if(testers.status==='rejected')throw testers.reason;
+    state.testers=testers.value;
     state.testersLoaded=true;
+    if(invites.status==='fulfilled'){
+      state.testerInvites=invites.value.invites||[];
+      state.testerInviteError='';
+    }else state.testerInviteError='Não foi possível consultar os convites de testers.';
   }catch(error){
     state.testersError=error.message||'Erro na consulta.';
     if(!state.testersLoaded)state.testers=null;
@@ -569,6 +647,10 @@ async function loadInvites() {
   try {
     const data=await request('/api/admin/invites');
     state.invites=data.invites||[];
+    if(state.user.isFounder){
+      try { const response=await request('/api/admin/partners');state.partners=response.partners||[];state.partnersError=''; }
+      catch(error){ state.partnersError=error.message||'Não foi possível listar sócios.'; }
+    }
     state.invitesHasMore=Boolean(data.hasMore);
     state.invitesLoaded=true;
   } catch(error) {
@@ -631,8 +713,8 @@ async function onForm(event) {
   try {
     if(form.id==='auth-form') {
       const payload={email:fd.get('email'),password:fd.get('password')};
-      const action=inviteToken?'/api/auth/register':'/api/auth/login';
-      if(inviteToken){payload.invite=inviteToken;payload.businessName=fd.get('businessName');}
+      const action=inviteToken?(partnerInvite?'/api/auth/partner-accept':'/api/auth/register'):'/api/auth/login';
+      if(inviteToken){payload.invite=inviteToken;if(!partnerInvite)payload.businessName=fd.get('businessName');}
       await request(action,{method:'POST',...jsonBody(payload)});
       inviteToken=''; history.replaceState({},'', '/');
       await reload();toast('Bem-vindo à Vitrine.');
@@ -654,6 +736,24 @@ async function onForm(event) {
       await reload();toast('Serviço salvo.');
     } else if(form.id==='command-form') {
       await runCommand(String(fd.get('command')));
+     } else if(form.id==='admin-invite-form'||form.id==='tester-invite-form') {
+      const admin=form.id==='admin-invite-form';
+      if(admin&&!state.user?.isFounder)throw Error('Apenas o fundador pode enviar convites ADM.');
+      const role=admin?'coadmin':'tester';
+      const data=await request('/api/admin/invites',{
+        method:'POST',...jsonBody({email:fd.get('email'),role})
+      });
+      if(admin){
+        state.adminInviteLink=location.origin+data.path;
+        state.adminInviteEmail=data.email;
+        state.adminSummary=null;
+        await loadAdminSummary();
+      }else{
+        state.testerInviteLink=location.origin+data.path;
+        state.testerInviteEmail=data.email;
+        await loadAdminTesters();
+      }
+      toast('Convite '+(admin?'ADM':'de tester')+' gerado. Compartilhe o link.');
     } else if(form.id==='tester-create-form') {
       await request('/api/admin/testers',{method:'POST',...jsonBody({email:fd.get('email'),notes:fd.get('notes')})});
       state.adminSummary=null;state.testerQuery='';state.testerStatus='todos';
@@ -663,13 +763,14 @@ async function onForm(event) {
       await request('/api/admin/testers/'+encodeURIComponent(userId),{method:'PATCH',...jsonBody({notes:fd.get('notes')})});
       state.testerDetailId=null;await loadAdminTesters();toast('Observação salva.');
     } else if(form.id==='invite-form') {
-      const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email')})});
+      const data=await request('/api/admin/invites',{method:'POST',...jsonBody({email:fd.get('email'),role:fd.get('role')||'business'})});
       state.inviteLink=location.origin+data.path;
       state.inviteLinkEmail=data.email || String(fd.get('email'));
+      state.inviteLinkRole=data.role||'business';
       state.inviteFilter='todos';state.inviteQuery='';
       await loadInvites();toast('Convite gerado. Copie e envie o link.');
     }
-  } catch(e) { toast(e.message,true); } finally { state.busy=false; if(form.id==='invite-form'&&state.user?.isAdmin)renderApp(); }
+  } catch(e) { toast(e.message,true); } finally { state.busy=false; if(['invite-form','admin-invite-form','tester-invite-form'].includes(form.id)&&state.user?.isAdmin)renderApp(); }
 }
 async function onClick(event) {
   const button=event.target.closest('[data-action]');
@@ -690,8 +791,38 @@ async function onClick(event) {
     }
     if(action==='tab') {state.tab=button.dataset.tab;if(state.tab==='invites')await loadInvites();if(state.tab==='admin-summary')await loadAdminSummary();if(state.tab==='admin-businesses')await loadAdminBusinesses();if(state.tab==='admin-testers')await loadAdminTesters();if(state.tab==='admin-system')await loadAdminSystem();renderApp();}
     else if(action==='refresh-summary') {await loadAdminSummary();}
+    else if(action==='copy-admin-invite') {if(state.adminInviteLink)await copy(state.adminInviteLink);}
+    else if(action==='copy-tester-invite') {if(state.testerInviteLink)await copy(state.testerInviteLink);}
+    else if(action==='cancel-role-invite'){
+      const role=button.dataset.role;
+      if(!['coadmin','tester'].includes(role))return;
+      if(role==='coadmin'&&!state.user?.isFounder)return;
+      const current=(role==='coadmin'?state.adminInvites:state.testerInvites).find(i=>i.id===button.dataset.id);
+      if(!current||inviteStatus(current)!=='pending')return;
+      if(!confirm('Cancelar o convite para '+current.email+'? O link deixará de funcionar.'))return;
+      state.busy=true;
+      try{
+        await request('/api/admin/invites/'+encodeURIComponent(current.id)+'/cancel',{
+          method:'POST',...jsonBody({confirm:true})
+        });
+        if(role==='coadmin'){
+          state.adminInviteLink='';await loadAdminSummary();
+        }else{
+          state.testerInviteLink='';await loadAdminTesters();
+        }
+        toast('Convite cancelado.');
+      }finally{state.busy=false;renderApp();}
+    }
     else if(action==='refresh-businesses') {await loadAdminBusinesses();}
     else if(action==='refresh-invites') {await loadInvites();}
+    else if(action==='revoke-partner'){
+      const partner=state.partners.find(p=>p.id===button.dataset.id);
+      if(!partner||!state.user.isFounder)return;
+      if(!confirm('Revogar acesso administrativo de '+partner.email+'? A conta comum não será excluída.'))return;
+      state.busy=true;
+      try {await request('/api/admin/partners/'+encodeURIComponent(partner.id)+'/revoke',{method:'POST',...jsonBody({confirm:true})});await loadAdminSummary();toast('Acesso administrativo revogado.');}
+      finally{state.busy=false;}
+    }
     else if(action==='refresh-testers') {await loadAdminTesters();}
     else if(action==='refresh-system') {await loadAdminSystem();}
     else if(action==='tester-filter') {state.testerStatus=button.dataset.filter;renderApp();}
@@ -804,6 +935,6 @@ root.addEventListener('keydown',event=>{
 root.addEventListener('submit',onForm);
 root.addEventListener('click',onClick);
 root.addEventListener('change',onChange);
-(async()=>{if(publicSlug)await loadPublic();else{
+(async()=>{if(publicSlug)await loadPublic();else if(inviteToken){renderAuth();}else{
   try {await reload();} catch(e){ if(e.message.includes('Entre na sua conta')||e.message.includes('Sessão')||e.message.includes('login'))renderAuth();else {renderAuth();toast(e.message,true);} }
 }})();
