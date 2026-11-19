@@ -98,7 +98,8 @@ async function select(table, params) {
 // Exact operational counts for the founder console. This runs only on the server.
 async function countRows(table, filters = {}) {
   requireConfig();
-  const path = query(table, { select: 'id', ...filters });
+  const countColumn = table === 'beta_testers' ? 'user_id' : 'id';
+  const path = query(table, { select: countColumn, ...filters });
   const response = await fetch(SB + path, {
     method: 'GET',
     headers: {
