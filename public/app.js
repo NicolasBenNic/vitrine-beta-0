@@ -2,8 +2,9 @@ const root = document.getElementById('app');
 const toastBox = document.getElementById('toast');
 let inviteToken = new URLSearchParams(location.search).get('invite') || '';
 const partnerInvite = new URLSearchParams(location.search).get('partner') === '1';
+const testerInvite = new URLSearchParams(location.search).get('tester') === '1';
 const publicSlug = location.pathname.startsWith('/v/') ? location.pathname.slice(3) : '';
-const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', inviteLinkRole:'business', partners:[], partnersError:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
+const state = { user:null, business:null, items:[], tab:'home', modal:null, editImagePath:'', previewIndex:0, editDraft:null, editImageURL:'', public:null, publicIndex:0, publicFilter:'Todos', invites:[], inviteLink:'', inviteLinkEmail:'', inviteLinkRole:'business', adminInvites:[], testerInvites:[], adminInviteLink:'', testerInviteLink:'', adminInviteEmail:'', testerInviteEmail:'', adminInviteError:'', testerInviteError:'', partners:[], partnersError:'', invitesLoading:false, invitesLoaded:false, invitesError:'', invitesHasMore:false, inviteFilter:'todos', inviteQuery:'', adminSummary:null, adminSummaryLoading:false, adminSummaryError:'', adminBusinesses:null, adminBusinessesLoading:false, adminBusinessesError:'', adminBusinessQuery:'', adminBusinessStatus:'todos', businessDetailId:null, testers:null, testersLoaded:false, testersLoading:false, testersError:'', testerQuery:'', testerStatus:'todos', testerDetailId:null, systemReport:null, systemLoading:false, systemError:'', busy:false };
 let toastTimer;
 function esc(value) { return String(value === undefined || value === null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function money(cents) { return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(cents || 0) / 100); }
@@ -42,13 +43,13 @@ function renderAuth() {
     '<p class="lead" style="color:#3d3a3f">Produtos, serviços e preços em um link simples para compartilhar com seus clientes.</p></div>' +
     '<p class="small">Vitrine Beta · acesso somente por convite</p></div>' +
     '<div class="auth-box"><form class="auth-form" id="auth-form">' + logo() +
-    '<span class="pill green">' + (partnerAccess?'Convite de sócio · ADM':registering?'Seu convite chegou':'Área de acesso') + '</span>' +
-    '<h2>' + (partnerAccess?'Ativar acesso de sócio':registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
-    '<p class="auth-hint">' + (partnerAccess?'Use o e-mail do convite e sua senha. Se já tiver conta, use a senha atual. Caso contrário, crie uma senha com pelo menos 10 caracteres.':registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
+    '<span class="pill green">' + (partnerAccess?'Convite de administrador':registering&&testerInvite?'Convite para tester':registering?'Seu convite chegou':'Área de acesso') + '</span>' +
+    '<h2>' + (partnerAccess?'Ativar acesso ADM':registering&&testerInvite?'Criar minha vitrine de teste':registering?'Ativar minha vitrine':'Entrar na Vitrine') + '</h2>' +
+    '<p class="auth-hint">' + (partnerAccess?'Use o e-mail do convite e sua senha. Se já tiver conta, use a senha atual. Caso contrário, crie uma senha com pelo menos 10 caracteres.':registering&&testerInvite?'Você terá acesso apenas à criação e edição da sua própria vitrine.':registering?'Crie sua conta para começar.':'Apenas pessoas convidadas podem criar uma conta.') + '</p>' +
     '<label class="field">Email<input name="email" type="email" autocomplete="email" required placeholder="voce@exemplo.com"></label>' +
     (registering&&!partnerAccess?'<label class="field">Nome do negócio<input name="businessName" maxlength="120" required placeholder="Ex.: Barbearia Central"></label>':'') +
     '<label class="field">Senha<input name="password" type="password" autocomplete="' + (registering?'new-password':'current-password') + '" minlength="' + (registering?'10':'1') + '" required placeholder="Sua senha"></label>' +
-    '<button class="button lime" type="submit">' + (partnerAccess?'Ativar minha Central ADM':registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
+    '<button class="button lime" type="submit">' + (partnerAccess?'Ativar minha Central ADM':registering&&testerInvite?'Entrar como tester':registering?'Criar conta com convite':'Entrar na minha conta') + ' →</button>' +
     (registering?'<p class="auth-hint" style="margin-top:20px"><a href="/">Já tenho conta. Entrar</a></p>':'<p class="auth-hint" style="margin-top:20px">Ainda não recebeu convite? Peça um link para o administrador do Vitrine Beta.</p>') +
     '</form></div></div>';
 }
@@ -498,7 +499,7 @@ function itemModal() {
 function renderApp() {
   if (!state.user) return renderAuth();
   const navigation=[['home','⌂','Minha vitrine'],['catalog','▦','Produtos e serviços'],['publish','↗','Publicar e compartilhar']];
-  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['invites','✉','Convites beta'],['admin-testers','◇','Testers'],['admin-system','⌘','Sistema']); }
+  if (state.user.isAdmin) { navigation.unshift(['admin-summary','◫','Resumo ADM'],['admin-businesses','▦','Negócios'],['admin-testers','◇','Testers'],['admin-system','⌘','Sistema']); }
   const content={home:homepage,catalog:catalogPage,publish:publishPage,invites:invitesPage,'admin-summary':adminSummaryPage,'admin-businesses':adminBusinessesPage,'admin-testers':adminTestersPage,'admin-system':systemPage}[state.tab] || homepage;
   root.innerHTML='<div class="shell"><aside class="sidebar">'+logo()+
     '<div><p class="kicker" style="margin:0 12px 15px">'+(state.user.isAdmin?'operação & criação':'painel de criação')+'</p><nav class="nav">' +
