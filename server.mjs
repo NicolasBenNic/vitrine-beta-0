@@ -344,6 +344,56 @@ async function api(req, res, pathname) {
     if (!result.ok) { console.error('Upload error', result.status); fail(502, 'Falha ao enviar imagem.'); }
     return json(res, 201, { path, url: imageUrl(path) });
   }
+  // A point-in-time founder check, not uptime monitoring or the Render control-plane API.
+  // No secrets or exception details are returned to the browser.
+  if (pathname === '/api/admin/system' && req.method === 'GET') {
+    if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const [databaseCheck, authCheck, storageCheck] = await Promise.allSettled([
+      (async () => {
+        const [businesses, invites] = await Promise.all([
+          select('businesses', { select: 'name,created_at', order: 'created_at.desc', limit: '1' }),
+          select('beta_invites', { select: 'email,created_at', order: 'created_at.desc', limit: '1' })
+        ]);
+        return {
+          recentBusiness: businesses[0] ? { name: businesses[0].name, createdAt: businesses[0].created_at } : null,
+          recentInvite: invites[0] ? { email: invites[0].email, createdAt: invites[0].created_at } : null
+        };
+      })(),
+      (async () => {
+        const data = await call('/auth/v1/admin/users?page=1&per_page=1');
+        if (!Array.isArray(data?.users)) throw Error('Resposta Auth inesperada');
+        return true;
+      })(),
+      (async () => {
+        const data = await call('/storage/v1/bucket/vitrine-media');
+        if (data?.id !== 'vitrine-media' && data?.name !== 'vitrine-media') throw Error('Bucket não encontrado');
+        return true;
+      })()
+    ]);
+    for (const [name, result] of [
+      ['dados', databaseCheck], ['autenticação', authCheck], ['armazenamento', storageCheck]
+    ]) {
+      if (result.status === 'rejected') console.error('Admin system check failed:', name, String(result.reason?.message || 'Falha na consulta'));
+    }
+    const databaseHealthy = databaseCheck.status === 'fulfilled';
+    return json(res, 200, {
+      checkedAt: new Date().toISOString(),
+      environment: IS_PROD ? 'production' : 'development',
+      uptimeSeconds: Math.floor(process.uptime()),
+      services: {
+        app: { healthy: true, detail: 'Este servidor respondeu à consulta.' },
+        database: { healthy: databaseHealthy, detail: databaseHealthy ? 'Consulta de leitura realizada.' : 'Não foi possível consultar os dados.' },
+        auth: { healthy: authCheck.status === 'fulfilled', detail: authCheck.status === 'fulfilled' ? 'Serviço de autenticação respondeu.' : 'Não foi possível confirmar a autenticação.' },
+        storage: { healthy: storageCheck.status === 'fulfilled', detail: storageCheck.status === 'fulfilled' ? 'Bucket de mídia respondeu.' : 'Não foi possível confirmar o armazenamento.' }
+      },
+      recent: {
+        business: databaseHealthy ? databaseCheck.value.recentBusiness : null,
+        invite: databaseHealthy ? databaseCheck.value.recentInvite : null,
+        adminLoginAt: user.last_sign_in_at || null,
+        dataAvailable: databaseHealthy
+      }
+    });
+  }
   if (pathname === '/api/admin/summary' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
     const now = new Date();
