@@ -258,25 +258,51 @@ async function api(req, res, pathname) {
     const token = String(body.invite || '');
     if (!/^[a-zA-Z0-9_-]{30,100}$/.test(token)) fail(403, 'Convite inválido.');
     const hash = createHash('sha256').update(token).digest('hex');
-    const rows = await select('beta_invites', { token_hash: 'eq.' + hash, email: 'eq.' + email, used_at: 'is.null', expires_at: 'gt.' + new Date().toISOString(), invite_role: 'eq.business', select: 'id,email', limit: '1' });
-    if (!rows[0]) fail(403, 'Convite inexistente, usado ou expirado.');
+    // Only the server-stored invite determines the role. Client-provided role is ignored.
+    const current = new Date().toISOString();
+    const rows = await select('beta_invites', {
+      token_hash: 'eq.' + hash, email: 'eq.' + email,
+      used_at: 'is.null', expires_at: 'gt.' + current,
+      select: 'id,email,invite_role', limit: '1'
+    });
+    const invite = rows[0];
+    if (!invite || !['tester','business'].includes(invite.invite_role))
+      fail(403, 'Convite de empresa/tester inexistente, usado ou expirado.');
     const usedAt = new Date().toISOString();
-    const claimed = await patch('beta_invites', { id: 'eq.' + rows[0].id, used_at: 'is.null', invite_role: 'eq.business', expires_at: 'gt.' + usedAt }, { used_at: usedAt });
-    if (!claimed.length) fail(409, 'Convite já utilizado.');
+    const claimed = await patch('beta_invites', {
+      id: 'eq.' + invite.id,
+      invite_role: 'eq.' + invite.invite_role,
+      used_at: 'is.null', expires_at: 'gt.' + usedAt
+    }, { used_at: usedAt });
+    if (!claimed.length) fail(409, 'Convite já utilizado ou expirado.');
     let created = null;
     try {
       const result = await call('/auth/v1/admin/users', 'POST', { email, password, email_confirm: true });
       created = result?.user || result;
       if (!created?.id) fail(502, 'Não foi possível criar o usuário.');
-    } catch (err) {
-      await patch('beta_invites', { id: 'eq.' + rows[0].id, used_at: 'eq.' + usedAt }, { used_at: null }).catch(() => {});
+      const business = await insert('businesses', {
+        owner_id: created.id, name: businessName, slug: slugify(businessName)
+      });
+      if (!business?.id) fail(502, 'Não foi possível cadastrar o negócio.');
+      if (invite.invite_role === 'tester') {
+        const tester = await insert('beta_testers', {
+          user_id: created.id, email, enabled: true, notes: ''
+        });
+        if (tester?.user_id !== created.id) fail(502, 'Não foi possível validar o acesso de tester.');
+      }
+      const session = await signIn(email, password);
+      setSession(res, session);
+      return json(res, 201, { success: true, role: invite.invite_role });
+    } catch(err) {
+      // Both businesses and beta_testers have ON DELETE CASCADE from auth.users.
+      if (created?.id) {
+        try { await call('/auth/v1/admin/users/' + encodeURIComponent(created.id), 'DELETE'); }
+        catch(cleanupErr) { console.error('Unable to roll back failed registration', created.id); }
+      }
+      await patch('beta_invites', { id: 'eq.' + invite.id, used_at: 'eq.' + usedAt },
+        { used_at: null }).catch(() => {});
       throw err;
     }
-    try { await insert('businesses', { owner_id: created.id, name: businessName, slug: slugify(businessName) }); }
-    catch (err) { console.error('Business creation pending for user:', created.id); }
-    const session = await signIn(email, password);
-    setSession(res, session);
-    return json(res, 201, { success: true });
   }
   if (pathname === '/api/auth/partner-accept' && req.method === 'POST') {
     rateLimit(req, 'partner-accept', 6);
@@ -626,8 +652,12 @@ async function api(req, res, pathname) {
   }
   if (pathname === '/api/admin/invites' && req.method === 'GET') {
     if (!isAdmin(user)) fail(403, 'Área restrita ao administrador.');
+    const role = new URL(req.url || '/', 'http://localhost').searchParams.get('role');
+    if (role && !['business','tester','coadmin'].includes(role)) fail(400, 'Filtro inválido.');
+    if (role === 'coadmin' && !isFounder(user)) fail(403, 'Apenas o fundador pode consultar convites ADM.');
     const filters = { select: 'id,email,created_at,expires_at,used_at,invite_role', order: 'created_at.desc', limit: '101' };
-    if (!isFounder(user)) filters.invite_role = 'eq.business';
+    if (role) filters.invite_role = 'eq.' + role;
+    else if (!isFounder(user)) filters.invite_role = 'eq.tester';
     const rows = await select('beta_invites', filters);
     return json(res, 200, { invites: rows.slice(0,100), hasMore: rows.length > 100, asOf: new Date().toISOString() });
   }
@@ -637,7 +667,7 @@ async function api(req, res, pathname) {
     const body = await readJSON(req);
     const email = cleanEmail(body.email);
     const invite_role = body.role === undefined ? 'business' : String(body.role);
-    if (!['business','coadmin'].includes(invite_role)) fail(400, 'Tipo de convite inválido.');
+    if (!['business','tester','coadmin'].includes(invite_role)) fail(400, 'Tipo de convite inválido.');
     if (invite_role === 'coadmin' && !isFounder(user)) fail(403, 'Apenas o fundador pode convidar administradores.');
     if (invite_role === 'coadmin' && email === ADMIN) fail(400, 'A conta do fundador já possui acesso.');
     const token = randomBytes(32).toString('base64url');
@@ -645,7 +675,7 @@ async function api(req, res, pathname) {
     const expires_at = new Date(Date.now() + 14 * 86400000).toISOString();
     await insert('beta_invites', { email, token_hash, expires_at, invite_role });
     return json(res, 201, { email, expires_at, role: invite_role,
-      path: '/?invite=' + encodeURIComponent(token) + (invite_role === 'coadmin' ? '&partner=1' : '') });
+      path: '/?invite=' + encodeURIComponent(token) + (invite_role === 'coadmin' ? '&partner=1' : invite_role === 'tester' ? '&tester=1' : '') });
   }
   const cancelInvite = /^\/api\/admin\/invites\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/cancel$/.exec(pathname);
   if (cancelInvite && req.method === 'POST') {
