@@ -610,3 +610,6 @@ input:focus,select:focus,textarea:focus{
   .ops-tester-status{font-size:.65rem;padding:7px 8px}
   .ops-tester-count{font-size:.58rem}
 }
+
+/* Founder tabs remain visible and touch-friendly on small screens. */
+@media(max-width:740px){.sidebar .nav{display:flex;flex-wrap:wrap;overflow:visible;gap:5px}.sidebar .nav button{font-size:.72rem;padding:9px 11px}}
